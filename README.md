@@ -53,6 +53,8 @@ The phone app and Wear OS companion share an `applicationId` (`com.glycemicgpt.m
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for full build setup, branching strategy, and code style.
 
+A `shell.nix` at the repo root provisions the complete toolchain (JDK 17, Gradle, Android SDK platforms 34/35/36, emulator system images) -- run `nix-shell` from the repo root if you use Nix. Otherwise install the prerequisites listed in CONTRIBUTING.md.
+
 ```bash
 # Build debug APKs (phone + Wear OS)
 ./gradlew assembleDebug
