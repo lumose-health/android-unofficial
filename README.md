@@ -83,7 +83,7 @@ This project is licensed under the **GNU General Public License v3.0 (GPL-3.0)**
 
 ## Open Questions / In Progress
 
-A few legal and community-health documents for this repository -- `MEDICAL-DISCLAIMER.md`, `PRIVACY.md`, `THIRD_PARTY_LICENSES.md`, SPDX license headers, and this project's `funding.json` entry -- are tracked as separate, in-progress work and are not yet present in this repository. Until they land, treat the main platform repo's equivalent documents as authoritative for this codebase.
+A few legal and community-health documents for this repository -- `MEDICAL-DISCLAIMER.md`, `PRIVACY.md`, SPDX license headers, and this project's `funding.json` entry -- are tracked as separate, in-progress work and are not yet present in this repository. Until they land, treat the main platform repo's equivalent documents as authoritative for this codebase. (`THIRD_PARTY_LICENSES.md` arrived with the extracted mobile tree and is present at the repo root.)
 
 ## Disclaimer
 

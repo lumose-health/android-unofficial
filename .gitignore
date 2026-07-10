@@ -58,3 +58,6 @@ Thumbs.db
 
 # This repo's own planning workspace (gitignored, not deployment)
 _bmad-output/
+
+# Claude Code local settings and transcripts
+.claude/

@@ -66,7 +66,7 @@ class WatchFacePusherTest {
         val assetPath = "src/$buildType/assets/glycemicgpt-watchface-$flavor.apk"
         val templatePath = "src/$flavor/templates/watchface.xml"
 
-        /** Path used in watchface/committed-assets.sha256, relative to apps/mobile. */
+        /** Path used in watchface/committed-assets.sha256, relative to the repo root. */
         val appRelativePath = "app/$assetPath"
 
         /**
@@ -354,7 +354,7 @@ class WatchFacePusherTest {
         val marker = "src/main/java/com/glycemicgpt/mobile/wear/WatchFacePusher.kt"
         var dir: File? = File(System.getProperty("user.dir")).absoluteFile
         while (dir != null) {
-            listOf(dir, File(dir, "app"), File(dir, "apps/mobile/app")).forEach { candidate ->
+            listOf(dir, File(dir, "app")).forEach { candidate ->
                 if (File(candidate, marker).isFile) return candidate
             }
             dir = dir.parentFile

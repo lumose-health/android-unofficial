@@ -18,6 +18,9 @@ Run on a fresh clone (`git clone -b develop <monorepo-url>`), never on a
 working checkout:
 
 ```bash
+# Pin to the recorded source commit. If develop has moved past it, run
+# `git reset --hard 2ffc3607d1fd7676070181d2886d476d7868f268` first and
+# pass --force to filter-repo (safe: the clone is a throwaway).
 git filter-repo \
   --path apps/mobile/ \
   --path plugins/ \
@@ -25,6 +28,10 @@ git filter-repo \
   --path scripts/mobile-dev.sh \
   --path LICENSE \
   --path-rename apps/mobile/:
+
+# filter-repo rewrites (not deletes) tags reachable from retained history;
+# strip them all per the tag decision below.
+git tag -l | xargs -r git tag -d
 ```
 
 ### Path list rationale
