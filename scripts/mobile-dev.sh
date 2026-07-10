@@ -21,7 +21,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-MOBILE_DIR="$PROJECT_ROOT/apps/mobile"
+MOBILE_DIR="$PROJECT_ROOT"
 PHONE_APK="$MOBILE_DIR/app/build/outputs/apk/debug/app-debug.apk"
 WEAR_APK="$MOBILE_DIR/wear-device/build/outputs/apk/debug/wear-device-debug.apk"
 AVD_NAME="test_device"
@@ -232,7 +232,7 @@ case "${1:-help}" in
         echo "  watch logcat         Stream filtered watch service logs"
         echo ""
         echo "Prerequisites:"
-        echo "  Run inside nix-shell (cd apps/mobile && nix-shell)"
+        echo "  Run inside nix-shell (run nix-shell from the repo root)"
         echo "  Or ensure ANDROID_HOME is set and adb is in PATH"
         ;;
 esac

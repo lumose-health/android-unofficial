@@ -34,6 +34,9 @@ pkgs.mkShell {
     androidSdk
     pkgs.jdk17
     pkgs.gradle
+    # The watchface re-sign task shells out to `zip`; declare it so the
+    # shell is self-contained instead of relying on the host to provide it
+    pkgs.zip
   ];
 
   ANDROID_HOME = "${androidSdk}/libexec/android-sdk";
