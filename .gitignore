@@ -1,0 +1,60 @@
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Android Studio / IntelliJ
+.idea/
+*.iml
+*.iws
+*.ipr
+local.properties
+
+# Signing keys -- never commit these
+*.jks
+*.keystore
+keystore.properties
+
+# Build outputs
+app/build/
+app/release/
+wear-device/build/
+watchface/build/
+plugins/**/build/
+
+# Local SDK extension (platform used for watch face push)
+.android/
+
+# Kotlin
+*.class
+.kotlin/
+
+# Nix shell Gradle home
+.gradle-home/
+
+# Test outputs
+app/src/androidTest/outputs/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+*.swp
+*.swo
+*~
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+
+# Secrets (never commit these)
+*.pem
+*.key
+
+# This repo's own planning workspace (gitignored, not deployment)
+_bmad-output/
