@@ -36,10 +36,11 @@ test added to `:app` is executed automatically, no workflow change required.
   assertions.
 - **Triggering:** the job reuses the same `detect-changes` path filter as the rest of the
   Android workflow, so it runs only on mobile-relevant PRs — the paths the filter matches
-  today are `app/**`, `wear-device/**`, `watchface/**`, `plugins/pump-driver-api/**`,
-  `plugins/shipped/**`, and `.github/workflows/android.yml` — never on backend-only
-  changes. (The filter lives in `android.yml`; that is the source of truth if the matched
-  paths change.)
+  today are `app/**`, `wear-device/**`, `watchface/**`, `plugins/**`, `gradle/**`, the
+  Gradle wrapper scripts, `settings.gradle.kts`, `settings-gradle.lockfile`,
+  `build.gradle.kts`, `gradle.properties`, and `.github/workflows/android.yml` — never on
+  docs/governance-only changes. (The filter lives in `android.yml`; that is the source of
+  truth if the matched paths change.)
 - **Timeout:** the job is bounded (45 min) so a wedged emulator can't run indefinitely.
 - **Report:** the HTML/XML test report is uploaded as the `instrumented-test-report`
   artifact (even on failure) so a red run is debuggable from the PR.

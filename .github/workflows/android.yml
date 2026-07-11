@@ -5,6 +5,10 @@ name: Android
 # wear-device/, watchface/, plugins/) -- this repo's Gradle project root IS
 # the repository root, unlike the platform monorepo where it's nested under
 # apps/mobile/.
+#
+# detect-changes is still worth keeping even though this repo is single-purpose:
+# it skips the build for docs/governance-only PRs (README, CLAUDE.md, docs/**)
+# that don't touch anything Gradle resolves.
 
 on:
   push:
@@ -45,7 +49,9 @@ jobs:
               - 'gradlew'
               - 'gradlew.bat'
               - 'settings.gradle.kts'
+              - 'settings-gradle.lockfile'
               - 'build.gradle.kts'
+              - 'gradle.properties'
               - '.github/workflows/android.yml'
 
   build:
