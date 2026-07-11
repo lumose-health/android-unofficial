@@ -64,9 +64,7 @@ class ReleaseTreeTest {
     fun `preserves non-sensitive messages`() {
         val msg = "Connection test failed: timeout"
         val result = ReleaseTree.scrubSensitiveData(msg)
-        // MUTATION-PROOF (56.4 / GLY-87): deliberately wrong expectation, reverted in the
-        // follow-up commit once the Android Gate is confirmed red.
-        assertEquals("this assertion is deliberately wrong", result)
+        assertEquals("Connection test failed: timeout", result)
     }
 
     @Test
