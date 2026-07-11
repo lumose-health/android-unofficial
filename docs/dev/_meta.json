@@ -1,0 +1,9 @@
+{
+  "title": "Developer Reference",
+  "pages": [
+    "instrumented-tests-ci",
+    "security-testing",
+    "plugin-architecture",
+    "wear-os-architecture"
+  ]
+}
