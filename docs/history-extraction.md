@@ -39,7 +39,7 @@ git tag -l | xargs -r git tag -d
 | Path | Why |
 |------|-----|
 | `apps/mobile/` | The Gradle build root: `:app`, `:wear-device`, `:watchface`, wrapper, version catalog, `shell.nix`, `THIRD_PARTY_LICENSES.md`. Re-rooted to `/`. |
-| `plugins/` | `pump-driver-api` (plugin SDK), `shipped/tandem`, `shipped/medtronic` (incl. its vendored `org.openminimed.sake` crypto), and `example` (third-party plugin template). Kept as a root-level `plugins/` subtree per the epic layout ruling. |
+| `plugins/` | `pump-driver-api` (plugin SDK), `shipped/tandem`, `shipped/medtronic` (which consumes JavaSake, `org.openminimed:javasake`, from Maven Central -- the SAKE crypto is no longer vendored), and `example` (third-party plugin template). Kept as a root-level `plugins/` subtree per the epic layout ruling. |
 | `tools/medtronic-ble-spike/` | Android BLE research spike; carried for provenance per the epic layout ruling. Standalone Gradle build with its own `settings.gradle.kts`; not part of the app build. |
 | `scripts/mobile-dev.sh` | The mobile dev helper script the workflow documents. |
 | `LICENSE` | GPL-3.0, identical to the scaffold's copy; carried so license history travels with the code. |

@@ -4,17 +4,11 @@ name: Bootstrap Check
 # repository depends on -- org GitHub App token minting -- plus a KVM-runner
 # reminder (see below), independent of whether app code exists yet.
 #
-# android.yml (the real Android Gate: build/test/lint) already exists
-# alongside this file. The two are not redundant: android.yml's jobs no-op
-# via path filtering until app/, wear-device/, watchface/, and plugins/
-# exist in this repo, so until then it proves nothing. This file is kept
-# as a minimal, code-independent smoke test of the token/auth plumbing
-# specifically, so that plumbing is provably working even before there is
-# any app code for android.yml to build.
-#
-# This workflow has not been executed yet -- it will run for the first time
-# once the maintainer creates the real repository and this file is pushed
-# there.
+# This is currently the only workflow in the repository. The real Android
+# Gate (build/test/lint) and the security/dependency gates are added in
+# later extraction stories; until they land, this file is the bootstrap
+# smoke test of the token/auth plumbing, so that plumbing is provably
+# working while the build CI is stood up.
 
 on:
   push:
