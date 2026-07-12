@@ -12,6 +12,84 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class AppUpdateCheckerTest {
 
+    // Self-update targets the standalone Android repository, not the monorepo.
+
+    @Test
+    fun `release URLs target the android-only repository`() {
+        assertTrue(AppUpdateChecker.STABLE_RELEASES_URL.startsWith("https://api.github.com/"))
+        assertTrue(AppUpdateChecker.DEV_RELEASES_URL.startsWith("https://api.github.com/"))
+        assertTrue(
+            AppUpdateChecker.STABLE_RELEASES_URL
+                .contains("/repos/GlycemicGPT/glycemicgpt-android-unofficial/"),
+        )
+        assertTrue(
+            AppUpdateChecker.DEV_RELEASES_URL
+                .contains("/repos/GlycemicGPT/glycemicgpt-android-unofficial/"),
+        )
+        // Never regress to the monorepo owner/repo.
+        assertFalse(AppUpdateChecker.STABLE_RELEASES_URL.contains("/GlycemicGPT/GlycemicGPT/"))
+        assertFalse(AppUpdateChecker.DEV_RELEASES_URL.contains("/GlycemicGPT/GlycemicGPT/"))
+    }
+
+    private fun asset(name: String) = GitHubAsset(
+        name = name,
+        browserDownloadUrl =
+            "https://github.com/GlycemicGPT/glycemicgpt-android-unofficial/releases/download/v0.13.0/$name",
+        size = 1L,
+    )
+
+    @Test
+    fun `stable selection returns the phone APK even when Wear and WatchFace assets come first`() {
+        // A stable release carries the phone, Wear, and both WatchFace APKs -- all match
+        // APK_PREFIX + "-release.apk". GitHub does not guarantee asset order, so the phone
+        // asset is placed LAST to prove the selector discriminates by name, not order.
+        // Without the Wear/WatchFace exclusion this returns the Wear APK, which shares the
+        // phone applicationId + signing key and would install in place over the phone app.
+        val assets = listOf(
+            asset("GlycemicGPT-Wear-0.13.0-release.apk"),
+            asset("GlycemicGPT-WatchFace-Digital-0.13.0-release.apk"),
+            asset("GlycemicGPT-WatchFace-Analog-0.13.0-release.apk"),
+            asset("GlycemicGPT-0.13.0-release.apk"),
+        )
+        assertEquals(
+            "GlycemicGPT-0.13.0-release.apk",
+            AppUpdateChecker.selectPhoneAsset(assets, "-release.apk")?.name,
+        )
+    }
+
+    @Test
+    fun `dev selection returns the phone APK even when Wear and WatchFace assets come first`() {
+        val assets = listOf(
+            asset("GlycemicGPT-Wear-0.13.0-dev.42-debug.apk"),
+            asset("GlycemicGPT-WatchFace-Digital-0.13.0-dev.42-debug.apk"),
+            asset("GlycemicGPT-WatchFace-Analog-0.13.0-dev.42-debug.apk"),
+            asset("GlycemicGPT-0.13.0-dev.42-debug.apk"),
+        )
+        assertEquals(
+            "GlycemicGPT-0.13.0-dev.42-debug.apk",
+            AppUpdateChecker.selectPhoneAsset(assets, "-debug.apk")?.name,
+        )
+    }
+
+    @Test
+    fun `phone asset predicate rejects Wear and WatchFace on both channels`() {
+        for (suffix in listOf("-release.apk", "-debug.apk")) {
+            assertTrue(AppUpdateChecker.isPhoneApkAsset("GlycemicGPT-0.13.0$suffix", suffix))
+            assertFalse(AppUpdateChecker.isPhoneApkAsset("GlycemicGPT-Wear-0.13.0$suffix", suffix))
+            assertFalse(
+                AppUpdateChecker.isPhoneApkAsset("GlycemicGPT-WatchFace-Digital-0.13.0$suffix", suffix),
+            )
+            assertFalse(
+                AppUpdateChecker.isPhoneApkAsset("GlycemicGPT-WatchFace-Analog-0.13.0$suffix", suffix),
+            )
+            assertFalse(AppUpdateChecker.isPhoneApkAsset("SomeOtherApp-0.13.0$suffix", suffix))
+        }
+        // A dev asset is not selected on the stable channel (suffix mismatch).
+        assertFalse(
+            AppUpdateChecker.isPhoneApkAsset("GlycemicGPT-0.13.0-dev.42-debug.apk", "-release.apk"),
+        )
+    }
+
     @Test
     fun `parseVersionCode for simple version`() {
         assertEquals(1_000_000, AppUpdateChecker.parseVersionCode("1.0.0"))
@@ -109,7 +187,8 @@ class AppUpdateCheckerTest {
 
     @Test
     fun `an https URL to an allowed host passes both download guards`() {
-        val url = "https://github.com/GlycemicGPT/GlycemicGPT/releases/download/v1.0/app.apk"
+        val url =
+            "https://github.com/GlycemicGPT/glycemicgpt-android-unofficial/releases/download/v1.0/app.apk"
         assertTrue(AppUpdateChecker.isHttpsUrl(url))
         assertTrue(AppUpdateChecker.isAllowedDownloadHost(url))
     }

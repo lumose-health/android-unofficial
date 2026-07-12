@@ -1,0 +1,21 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "bootstrap-sha": "53bd47b72639ccf7fc132a7a1e33265e0d744042",
+  "packages": {
+    ".": {
+      "release-type": "simple",
+      "package-name": "glycemicgpt-android-unofficial",
+      "bump-minor-pre-major": true,
+      "draft": false,
+      "prerelease": false,
+      "include-component-in-tag": false,
+      "include-v-in-tag": true,
+      "pull-request-title-pattern": "chore: release ${version}",
+      "extra-files": [
+        "app/build.gradle.kts",
+        "wear-device/build.gradle.kts",
+        "watchface/build.gradle.kts"
+      ]
+    }
+  }
+}
