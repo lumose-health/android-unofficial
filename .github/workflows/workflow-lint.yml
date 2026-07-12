@@ -1,0 +1,129 @@
+name: Workflow Lint
+
+# Static analysis of this repository's CI configuration on every PR.
+#
+#   1. actionlint (with its shellcheck integration) over .github/workflows/**
+#      -- catches unknown/undefined contexts and named-values (the
+#      "Unrecognized named-value" class that broke op-load-signing-secrets),
+#      malformed expressions, invalid `needs`/`if`, and shell bugs in run
+#      blocks. actionlint's proper domain is workflow files; it also validates
+#      the input contract of the local composite action via the workflows that
+#      call it.
+#   2. A SHA-pin guard over workflows AND .github/actions/** -- enforces the
+#      supply-chain rule that every third-party action is pinned to a commit
+#      SHA (actionlint does not check this).
+#   3. A composite-action secrets-context guard -- actionlint cannot lint a
+#      composite action *definition* (it parses action.yml as a malformed
+#      workflow), so this catches ${{ secrets.* }} used inside a composite
+#      action, which resolves to empty at runtime.
+#
+# Tools are installed as version-pinned binaries with SHA-256 verification
+# rather than third-party actions, so the gate has no unpinned dependency of
+# its own.
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: workflow-lint-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  workflow-lint:
+    name: Workflow Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install shellcheck (pinned)
+        env:
+          SHELLCHECK_VERSION: "0.10.0"
+          SHELLCHECK_SHA256: "6c881ab0698e4e6ea235245f22832860544f17ba386442fe7e9d629f8cbedf87"
+        run: |
+          mkdir -p "$RUNNER_TEMP/tools"
+          curl -fsSL -o "$RUNNER_TEMP/shellcheck.tar.xz" \
+            "https://github.com/koalaman/shellcheck/releases/download/v${SHELLCHECK_VERSION}/shellcheck-v${SHELLCHECK_VERSION}.linux.x86_64.tar.xz"
+          echo "${SHELLCHECK_SHA256}  $RUNNER_TEMP/shellcheck.tar.xz" | sha256sum -c -
+          tar -xJf "$RUNNER_TEMP/shellcheck.tar.xz" -C "$RUNNER_TEMP/tools" --strip-components=1 \
+            "shellcheck-v${SHELLCHECK_VERSION}/shellcheck"
+          echo "$RUNNER_TEMP/tools" >> "$GITHUB_PATH"
+
+      - name: Install actionlint (pinned)
+        env:
+          ACTIONLINT_VERSION: "1.7.7"
+          ACTIONLINT_SHA256: "023070a287cd8cccd71515fedc843f1985bf96c436b7effaecce67290e7e0757"
+        run: |
+          mkdir -p "$RUNNER_TEMP/tools"
+          curl -fsSL -o "$RUNNER_TEMP/actionlint.tar.gz" \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          echo "${ACTIONLINT_SHA256}  $RUNNER_TEMP/actionlint.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP/tools" actionlint
+          echo "$RUNNER_TEMP/tools" >> "$GITHUB_PATH"
+
+      - name: Run actionlint (with shellcheck)
+        run: |
+          # No file args: actionlint auto-discovers .github/workflows/. It does
+          # not lint composite action definitions (guarded separately below).
+          actionlint -oneline -shellcheck="$RUNNER_TEMP/tools/shellcheck"
+
+      - name: Enforce SHA-pinned third-party actions
+        run: |
+          # Every `uses:` that references a third-party action must pin a full
+          # 40-hex commit SHA. Local actions (uses: ./...) and docker refs are
+          # exempt. This enforces the supply-chain rule Renovate/CodeRabbit
+          # otherwise only advise.
+          failed=0
+          while IFS= read -r ref; do
+            # Strip surrounding quotes if the ref was written as a quoted scalar.
+            ref="${ref%\"}"; ref="${ref#\"}"
+            ref="${ref%\'}"; ref="${ref#\'}"
+            case "$ref" in
+              ""|./*|docker://*) continue ;;
+              *@*) : ;;
+              *) echo "::error::Action reference is not pinned (no @<sha>): $ref"; failed=1; continue ;;
+            esac
+            sha="${ref##*@}"
+            if [ "${#sha}" -eq 40 ] && [ -z "$(printf '%s' "$sha" | tr -d '0-9a-f')" ]; then
+              continue
+            fi
+            echo "::error::Action is not pinned to a 40-hex commit SHA: $ref"
+            failed=1
+          # awk isolates the whitespace-delimited token after `uses:`, which is
+          # robust to a leading "- ", extra spacing, a trailing "# vX" comment,
+          # and trailing whitespace (all separate fields).
+          done < <(grep -rhE '^[[:space:]]*(-[[:space:]]+)?uses:[[:space:]]' .github/workflows .github/actions \
+                   | awk '{ for (i = 1; i <= NF; i++) if ($i == "uses:") { print $(i + 1); break } }')
+          if [ "$failed" -ne 0 ]; then
+            echo "::error::One or more third-party actions are not SHA-pinned."
+            exit 1
+          fi
+          echo "All third-party action references are SHA-pinned."
+
+      - name: Guard composite actions against secrets-context use
+        run: |
+          # Composite actions cannot read the secrets context; a secrets.*
+          # reference in one resolves to empty at runtime -- the failure class
+          # that broke op-load-signing-secrets. Comment lines (which document
+          # what the calling job must set) are excluded.
+          failed=0
+          while IFS= read -r hit; do
+            [ -n "$hit" ] || continue
+            echo "::error::Composite action uses the secrets context (inherit via env from the calling job instead): $hit"
+            failed=1
+          done < <(grep -rnE '\$\{\{[[:space:]]*secrets\.' .github/actions 2>/dev/null \
+                   | grep -vE ':[0-9]+:[[:space:]]*#' || true)
+          if [ "$failed" -ne 0 ]; then
+            exit 1
+          fi
+          echo "Composite-action secrets-context guard passed."

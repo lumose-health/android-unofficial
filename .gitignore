@@ -56,6 +56,12 @@ Thumbs.db
 *.pem
 *.key
 
+# Security scan outputs (local semgrep / osv-scanner runs; CI uploads these as
+# artifacts rather than committing them -- see docs/dev/security-testing.md)
+semgrep-*.json
+osv-results.json
+*.sarif
+
 # This repo's own planning workspace (gitignored, not deployment)
 _bmad-output/
 
