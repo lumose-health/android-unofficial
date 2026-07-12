@@ -1,0 +1,73 @@
+name: Signing Action Smoke
+
+# Manually-dispatched end-to-end smoke test for the op-load-signing-secrets
+# composite action. It maps the read-only 1Password service-account token at the
+# JOB level (the `secrets` context is valid in a workflow file, unlike inside the
+# composite action), invokes the action against the DEBUG identity, and asserts
+# the keystore was actually materialized -- WITHOUT echoing any secret value.
+#
+# This complements secrets-plumbing-check.yml: that check resolves only the
+# non-sensitive `canary` field and deliberately never touches signing material,
+# whereas this one runs the real action and materializes the debug keystore, so
+# it proves the action both LOADS (passes template validation) and works.
+#
+# workflow_dispatch only: GitHub exposes the "Run workflow" control (and the
+# `gh workflow run` API) only once a workflow_dispatch workflow reaches the repo's
+# default branch (main), so this becomes dispatchable after develop is promoted,
+# not while it lives only on develop.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: signing-action-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Materialize debug keystore via composite action
+    runs-on: ubuntu-latest
+    env:
+      # Read-only 1Password service-account token; the only signing-related secret
+      # stored in GitHub. The composite action inherits it from this job env.
+      OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.ANDROID_ACTIONS_SERVICE_ACCOUNT }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Load debug signing secrets from 1Password
+        id: signing
+        uses: ./.github/actions/op-load-signing-secrets
+        with:
+          keystore: debug
+
+      - name: Assert the debug keystore was materialized
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The action exports DEBUG_KEYSTORE_FILE (the materialized path) and also
+          # returns that same path as its keystore-path output. Assert both agree
+          # and that the file is a real, non-empty file. Only paths are printed --
+          # never a keystore byte, password, or the token.
+          out_path="${{ steps.signing.outputs.keystore-path }}"
+          if [ -z "${DEBUG_KEYSTORE_FILE:-}" ]; then
+            echo "::error::DEBUG_KEYSTORE_FILE was not exported by the action"
+            exit 1
+          fi
+          if [ "$out_path" != "$DEBUG_KEYSTORE_FILE" ]; then
+            echo "::error::keystore-path output disagrees with the exported DEBUG_KEYSTORE_FILE env"
+            exit 1
+          fi
+          if [ ! -s "$DEBUG_KEYSTORE_FILE" ]; then
+            echo "::error::materialized keystore is missing or empty at the exported path"
+            exit 1
+          fi
+          echo "Signing action smoke OK: debug keystore materialized at the exported path"
+
+      - name: Remove materialized keystore
+        if: always()
+        run: rm -f "${{ steps.signing.outputs.keystore-path }}"

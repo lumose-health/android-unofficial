@@ -94,6 +94,10 @@ A signing job maps the token, then calls the composite action once with
 jobs:
   build-release:
     runs-on: ubuntu-latest
+    # Least privilege: this job only needs to read the repo to check out and build.
+    # Bump to `contents: write` ONLY if the job itself creates a GitHub Release.
+    permissions:
+      contents: read
     env:
       # Map the only GitHub secret into the variable 1Password tooling reads.
       OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.ANDROID_ACTIONS_SERVICE_ACCOUNT }}
@@ -122,6 +126,12 @@ jobs:
 
 The debug variant is identical with `keystore: debug`; it exports the
 `DEBUG_*` names for the shared-debug-keystore build.
+
+The job declares `permissions: contents: read` -- least privilege for a build
+that only checks out and compiles. Raise it to `contents: write` only when the
+job itself creates a GitHub Release (for example, attaching the signed APK as a
+release asset); a build-and-sign job that merely uploads a workflow artifact does
+not need write access.
 
 ## Verifying the plumbing
 
