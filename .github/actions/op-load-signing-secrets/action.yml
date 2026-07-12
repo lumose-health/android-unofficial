@@ -119,8 +119,10 @@ runs:
           env_name="DEBUG_KEYSTORE_FILE"
         fi
         # op writes the attachment straight to disk; the bytes never transit a
-        # log or an env var. The destination path is not secret.
-        op read "$op_ref" --out-file "$dest"
+        # log or an env var. The destination path is not secret. --force skips the
+        # overwrite-confirmation prompt so a re-run or a persistent/self-hosted
+        # runner (where $dest may already exist) cannot hang waiting on stdin.
+        op read "$op_ref" --out-file "$dest" --force
         chmod 600 "$dest"
         echo "keystore-path=$dest" >> "$GITHUB_OUTPUT"
         # Export under the *_KEYSTORE_FILE name app/build.gradle.kts reads so the
