@@ -73,7 +73,7 @@ runs:
             ;;
         esac
         if [ -z "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]; then
-          echo "::error::OP_SERVICE_ACCOUNT_TOKEN is not set. The calling job must map it from a GitHub secret, e.g. 'env: OP_SERVICE_ACCOUNT_TOKEN: \${{ secrets.ANDROID_ACTIONS_SERVICE_ACCOUNT }}'."
+          echo "::error::OP_SERVICE_ACCOUNT_TOKEN is not set. The calling job must map it from the ANDROID_ACTIONS_SERVICE_ACCOUNT repo secret -- see docs/dev/signing-and-secrets.md."
           exit 1
         fi
 
@@ -85,7 +85,6 @@ runs:
       uses: 1password/load-secrets-action@3a12b0ab99d9cd590a3e9b5a90ea017210ed9556 # v4.0.1
       with:
         export-env: true
-        unset-previous: true
       env:
         RELEASE_KEYSTORE_PASSWORD: op://github/android-signing/RELEASE_KEYSTORE_PASSWORD
         RELEASE_KEY_ALIAS: op://github/android-signing/RELEASE_KEY_ALIAS
@@ -96,7 +95,6 @@ runs:
       uses: 1password/load-secrets-action@3a12b0ab99d9cd590a3e9b5a90ea017210ed9556 # v4.0.1
       with:
         export-env: true
-        unset-previous: true
       env:
         DEBUG_KEYSTORE_PASSWORD: op://github/android-signing/DEBUG_KEYSTORE_PASSWORD
         DEBUG_KEY_ALIAS: op://github/android-signing/DEBUG_KEY_ALIAS
@@ -122,6 +120,17 @@ runs:
         # log or an env var. The destination path is not secret. --force skips the
         # overwrite-confirmation prompt so a re-run or a persistent/self-hosted
         # runner (where $dest may already exist) cannot hang waiting on stdin.
+        #
+        # umask 077, then delete any pre-existing $dest, so op CREATES the keystore
+        # fresh at 0600 -- it is never even briefly group/world-readable in the
+        # window before the explicit chmod below, even on a persistent/self-hosted
+        # runner where an older keystore could linger (an in-place overwrite would
+        # otherwise keep a stale, looser mode). The ERR trap removes a partially
+        # written keystore if op read fails midway, so a mid-write failure never
+        # leaves a truncated file behind.
+        umask 077
+        trap 'rm -f "$dest"' ERR
+        rm -f "$dest"
         op read "$op_ref" --out-file "$dest" --force
         chmod 600 "$dest"
         echo "keystore-path=$dest" >> "$GITHUB_OUTPUT"
