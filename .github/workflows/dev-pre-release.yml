@@ -27,8 +27,12 @@ concurrency:
   group: dev-pre-release
   cancel-in-progress: false
 
+# Least privilege: the default GITHUB_TOKEN is read-only. The dev-latest
+# pre-release is published with a scoped glycemicgpt-ci App token exported as
+# GH_TOKEN (see the "Publish dev-latest pre-release" step) and the checkout uses
+# persist-credentials: false, so the ambient token never needs write.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build-debug-apk:
