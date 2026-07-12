@@ -22,6 +22,8 @@ on:
 
 permissions:
   contents: read
+  # dorny/paths-filter reads the PR's changed files on pull_request runs.
+  pull-requests: read
 
 concurrency:
   group: dep-scan-${{ github.ref }}

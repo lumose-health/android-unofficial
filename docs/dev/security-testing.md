@@ -168,7 +168,9 @@ semgrep scan \
   app/ wear-device/ watchface/ plugins/
 ```
 
-The gate blocks only on ERROR-severity results; a clean tree reports "0 findings".
+This reproduces the scan only. The gate additionally captures the JSON output,
+fails on ERROR-severity (HIGH) findings via a `jq` check, and fails closed if
+Semgrep itself errors (exit code >= 2). A clean tree reports "0 findings".
 
 ### Dependency Scan Gate
 
@@ -186,6 +188,11 @@ osv-scanner scan \
 # release binaries the workflow downloads).
 actionlint -shellcheck=shellcheck
 ```
+
+CI runs the same actionlint (with shellcheck) and additionally (a) fails if any
+third-party action is not pinned to a full commit SHA and (b) rejects any
+`secrets.*` reference inside a composite action; the local `actionlint` command
+alone does not check those two guards.
 
 That gradle resolution succeeds with locking enabled (and that lockfiles are complete) can be
 confirmed with any resolving task, e.g. `./gradlew help` or `./gradlew resolveAndLockAll

@@ -51,6 +51,8 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository &&
       startsWith(github.event.pull_request.head.ref, 'renovate/')
     runs-on: ubuntu-latest
+    # Bound the job that executes PR-branch build scripts (the default is 6h).
+    timeout-minutes: 15
     outputs:
       changed: ${{ steps.diff.outputs.changed }}
       source_sha: ${{ steps.source-sha.outputs.sha }}
@@ -110,6 +112,7 @@ jobs:
     needs: regenerate
     if: needs.regenerate.outputs.changed != '0'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       # Git operations only from here on -- no PR-authored code is executed in
       # this job (checkout does not run repository code, and hooks are disabled

@@ -12,8 +12,9 @@ concurrency:
 # Least privilege: the default GITHUB_TOKEN is read-only for every job. Each
 # actual write in this workflow -- release PRs, tags, releases, PR merges, and
 # APK asset uploads -- is performed with a scoped GitHub App token (release-please
-# and the fallback checkout receive it directly; auto-merge and the upload step
-# export it as GH_TOKEN), never with the ambient GITHUB_TOKEN, and checkouts use
+# and the fallback checkout receive it directly -- the latter persists
+# credentials for its git push; auto-merge and the upload step export it as
+# GH_TOKEN), never with the ambient GITHUB_TOKEN, and read-only checkouts use
 # persist-credentials: false. So no job needs a write grant.
 permissions:
   contents: read
