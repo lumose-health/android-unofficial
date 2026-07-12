@@ -210,10 +210,13 @@ class AppUpdateChecker @Inject constructor(
     }
 
     companion object {
-        private const val STABLE_RELEASES_URL =
-            "https://api.github.com/repos/GlycemicGPT/GlycemicGPT/releases/latest"
-        private const val DEV_RELEASES_URL =
-            "https://api.github.com/repos/GlycemicGPT/GlycemicGPT/releases/tags/dev-latest"
+        // Self-update source: the standalone Android repository, which owns the
+        // signed release and `dev-latest` pipelines this app polls. `internal`
+        // (not `private`) so AppUpdateCheckerTest can assert the target repo.
+        internal const val STABLE_RELEASES_URL =
+            "https://api.github.com/repos/GlycemicGPT/glycemicgpt-android-unofficial/releases/latest"
+        internal const val DEV_RELEASES_URL =
+            "https://api.github.com/repos/GlycemicGPT/glycemicgpt-android-unofficial/releases/tags/dev-latest"
         private const val APK_PREFIX = "GlycemicGPT-"
         private const val APK_SUBDIR = "apk_updates"
 

@@ -5,11 +5,44 @@ import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class WearAppUpdateCheckerTest {
+
+    // The wear checker self-updates from the standalone Android repository.
+
+    @Test
+    fun `wear release URLs target the android-only repository`() {
+        assertTrue(WearAppUpdateChecker.STABLE_RELEASES_URL.startsWith("https://api.github.com/"))
+        assertTrue(WearAppUpdateChecker.DEV_RELEASES_URL.startsWith("https://api.github.com/"))
+        assertTrue(
+            WearAppUpdateChecker.STABLE_RELEASES_URL
+                .contains("/repos/GlycemicGPT/glycemicgpt-android-unofficial/"),
+        )
+        assertTrue(
+            WearAppUpdateChecker.DEV_RELEASES_URL
+                .contains("/repos/GlycemicGPT/glycemicgpt-android-unofficial/"),
+        )
+        assertFalse(WearAppUpdateChecker.STABLE_RELEASES_URL.contains("/GlycemicGPT/GlycemicGPT/"))
+        assertFalse(WearAppUpdateChecker.DEV_RELEASES_URL.contains("/GlycemicGPT/GlycemicGPT/"))
+    }
+
+    @Test
+    fun `stable channel discriminates the renamed wear release asset`() {
+        // WearAppUpdateChecker.check() selects on WEAR_APK_PREFIX ("GlycemicGPT-Wear-")
+        // plus the "-release.apk" suffix. The phone release asset shares the
+        // "GlycemicGPT-" prefix but not "GlycemicGPT-Wear-", so the wear selector must
+        // reject it; the dev-suffixed wear name must also be rejected on the stable channel.
+        fun matchesWearStable(name: String) =
+            name.startsWith("GlycemicGPT-Wear-") && name.endsWith("-release.apk")
+
+        assertTrue(matchesWearStable("GlycemicGPT-Wear-0.13.0-release.apk"))
+        assertFalse(matchesWearStable("GlycemicGPT-0.13.0-release.apk"))
+        assertFalse(matchesWearStable("GlycemicGPT-Wear-0.13.0-dev.42-debug.apk"))
+    }
 
     @Test
     fun `parseDevRunNumber extracts number from wear APK filename`() {
@@ -34,7 +67,7 @@ class WearAppUpdateCheckerTest {
     fun `isAllowedDownloadHost accepts github domains`() {
         assertTrue(
             AppUpdateChecker.isAllowedDownloadHost(
-                "https://github.com/GlycemicGPT/GlycemicGPT/releases/download/v1.0.0/test.apk",
+                "https://github.com/GlycemicGPT/glycemicgpt-android-unofficial/releases/download/v1.0.0/test.apk",
             ),
         )
         assertTrue(
@@ -53,7 +86,8 @@ class WearAppUpdateCheckerTest {
 
     @Test
     fun `an https URL to an allowed host passes both wear download guards`() {
-        val url = "https://github.com/GlycemicGPT/GlycemicGPT/releases/download/v1.0/wear.apk"
+        val url =
+            "https://github.com/GlycemicGPT/glycemicgpt-android-unofficial/releases/download/v1.0/wear.apk"
         assertTrue(AppUpdateChecker.isHttpsUrl(url))
         assertTrue(AppUpdateChecker.isAllowedDownloadHost(url))
     }

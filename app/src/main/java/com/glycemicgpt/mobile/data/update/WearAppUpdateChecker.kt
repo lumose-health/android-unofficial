@@ -190,10 +190,13 @@ class WearAppUpdateChecker @Inject constructor(
     }
 
     companion object {
-        private const val STABLE_RELEASES_URL =
-            "https://api.github.com/repos/GlycemicGPT/GlycemicGPT/releases/latest"
-        private const val DEV_RELEASES_URL =
-            "https://api.github.com/repos/GlycemicGPT/GlycemicGPT/releases/tags/dev-latest"
+        // Self-update source: the standalone Android repository, which owns the
+        // signed release and `dev-latest` pipelines this app polls. `internal`
+        // (not `private`) so WearAppUpdateCheckerTest can assert the target repo.
+        internal const val STABLE_RELEASES_URL =
+            "https://api.github.com/repos/GlycemicGPT/glycemicgpt-android-unofficial/releases/latest"
+        internal const val DEV_RELEASES_URL =
+            "https://api.github.com/repos/GlycemicGPT/glycemicgpt-android-unofficial/releases/tags/dev-latest"
         private const val WEAR_APK_PREFIX = "GlycemicGPT-Wear-"
         private const val WEAR_APK_SUBDIR = "wear_apk_updates"
         /** Max download size: 100 MB to prevent disk exhaustion */

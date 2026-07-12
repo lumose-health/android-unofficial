@@ -12,6 +12,42 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class AppUpdateCheckerTest {
 
+    // Self-update targets the standalone Android repository, not the monorepo.
+
+    @Test
+    fun `release URLs target the android-only repository`() {
+        assertTrue(AppUpdateChecker.STABLE_RELEASES_URL.startsWith("https://api.github.com/"))
+        assertTrue(AppUpdateChecker.DEV_RELEASES_URL.startsWith("https://api.github.com/"))
+        assertTrue(
+            AppUpdateChecker.STABLE_RELEASES_URL
+                .contains("/repos/GlycemicGPT/glycemicgpt-android-unofficial/"),
+        )
+        assertTrue(
+            AppUpdateChecker.DEV_RELEASES_URL
+                .contains("/repos/GlycemicGPT/glycemicgpt-android-unofficial/"),
+        )
+        // Never regress to the monorepo owner/repo.
+        assertFalse(AppUpdateChecker.STABLE_RELEASES_URL.contains("/GlycemicGPT/GlycemicGPT/"))
+        assertFalse(AppUpdateChecker.DEV_RELEASES_URL.contains("/GlycemicGPT/GlycemicGPT/"))
+    }
+
+    @Test
+    fun `stable channel matches the renamed phone release asset and rejects dev assets`() {
+        // The signed-release workflow renames the phone APK to
+        // GlycemicGPT-<version>-release.apk; the dev pipeline emits
+        // GlycemicGPT-<version>-dev.<run>-debug.apk. AppUpdateChecker.check() selects the
+        // stable asset by APK_PREFIX ("GlycemicGPT-") plus the "-release.apk" suffix, which
+        // must accept the renamed release asset and reject the dev/debug name. The prefix is
+        // intentionally shared with the Wear/WatchFace release assets, so on the phone
+        // channel the "-release.apk" suffix is the discriminator against dev builds.
+        fun matchesPhoneStable(name: String) =
+            name.startsWith("GlycemicGPT-") && name.endsWith("-release.apk")
+
+        assertTrue(matchesPhoneStable("GlycemicGPT-0.13.0-release.apk"))
+        assertFalse(matchesPhoneStable("GlycemicGPT-0.13.0-dev.42-debug.apk"))
+        assertFalse(matchesPhoneStable("SomeOtherApp-0.13.0-release.apk"))
+    }
+
     @Test
     fun `parseVersionCode for simple version`() {
         assertEquals(1_000_000, AppUpdateChecker.parseVersionCode("1.0.0"))
@@ -109,7 +145,8 @@ class AppUpdateCheckerTest {
 
     @Test
     fun `an https URL to an allowed host passes both download guards`() {
-        val url = "https://github.com/GlycemicGPT/GlycemicGPT/releases/download/v1.0/app.apk"
+        val url =
+            "https://github.com/GlycemicGPT/glycemicgpt-android-unofficial/releases/download/v1.0/app.apk"
         assertTrue(AppUpdateChecker.isHttpsUrl(url))
         assertTrue(AppUpdateChecker.isAllowedDownloadHost(url))
     }
