@@ -1,0 +1,130 @@
+name: Load Android signing secrets from 1Password
+description: >-
+  Resolve the release or debug Android signing material from 1Password at
+  runtime so no signing secret is ever stored in GitHub. Text secrets are
+  loaded into masked env vars under the exact names app/build.gradle.kts reads;
+  the keystore file attachment is materialized to $RUNNER_TEMP and exposed both
+  as the keystore-path output and the matching *_KEYSTORE_FILE env var.
+
+# ── Auth (caller responsibility) ─────────────────────────────────────────────
+#   The calling job MUST set OP_SERVICE_ACCOUNT_TOKEN in its environment, mapped
+#   from the repo's read-only 1Password service-account token secret:
+#
+#     env:
+#       OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.ANDROID_ACTIONS_SERVICE_ACCOUNT }}
+#
+#   Both the op CLI and load-secrets-action read that variable. It is inherited
+#   from the job env into this composite action's steps and is intentionally NOT
+#   re-declared here: a composite action cannot read GitHub secrets directly, and
+#   re-declaring it from an (empty) composite expression context would clobber the
+#   inherited value.
+#
+# ── 1Password item layout (vault `github`, item `android-signing`) ───────────
+#   File attachments -- read with the op CLI (`op read --out-file`);
+#   load-secrets-action CANNOT resolve a file attachment:
+#     op://github/android-signing/release.jks
+#     op://github/android-signing/debug.keystore
+#   Text fields -- resolved by load-secrets-action into masked env vars:
+#     RELEASE_KEY_ALIAS, RELEASE_KEYSTORE_PASSWORD, RELEASE_KEY_PASSWORD
+#     DEBUG_KEY_ALIAS,   DEBUG_KEYSTORE_PASSWORD,   DEBUG_KEY_PASSWORD
+#
+# ── Env vars exported for app/build.gradle.kts signingConfigs (no renaming) ──
+#   release: RELEASE_KEYSTORE_FILE, RELEASE_KEYSTORE_PASSWORD,
+#            RELEASE_KEY_ALIAS, RELEASE_KEY_PASSWORD
+#   debug:   DEBUG_KEYSTORE_FILE, DEBUG_KEYSTORE_PASSWORD,
+#            DEBUG_KEY_ALIAS, DEBUG_KEY_PASSWORD
+#   The 1Password text-field names already match the gradle env-var names, so
+#   load-secrets-action exports them 1:1; this action only adds *_KEYSTORE_FILE
+#   (the materialized keystore path, which is not itself secret).
+#
+# ── Cleanup ──────────────────────────────────────────────────────────────────
+#   GitHub-hosted runners are ephemeral: $RUNNER_TEMP is destroyed with the
+#   runner at job end. Composite actions cannot register a post-job step, so on
+#   a self-hosted / persistent runner the caller should delete the keystore once
+#   signing is done, e.g.:
+#
+#     - if: always()
+#       run: rm -f "${{ steps.<step-id>.outputs.keystore-path }}"
+
+inputs:
+  keystore:
+    description: 'Which signing identity to load: "release" or "debug".'
+    required: true
+
+outputs:
+  keystore-path:
+    description: 'Absolute path to the materialized keystore in $RUNNER_TEMP (not secret).'
+    value: ${{ steps.materialize.outputs.keystore-path }}
+
+runs:
+  using: composite
+  steps:
+    - name: Preflight
+      shell: bash
+      env:
+        KEYSTORE: ${{ inputs.keystore }}
+      run: |
+        set -euo pipefail
+        case "$KEYSTORE" in
+          release|debug) ;;
+          *)
+            echo "::error::keystore input must be 'release' or 'debug' (got '$KEYSTORE')"
+            exit 1
+            ;;
+        esac
+        if [ -z "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]; then
+          echo "::error::OP_SERVICE_ACCOUNT_TOKEN is not set. The calling job must map it from a GitHub secret, e.g. 'env: OP_SERVICE_ACCOUNT_TOKEN: \${{ secrets.ANDROID_ACTIONS_SERVICE_ACCOUNT }}'."
+          exit 1
+        fi
+
+    - name: Install 1Password CLI
+      uses: 1password/install-cli-action@a5215d3a7f75c1629216c465ea9ab3ab399c4b71 # v4.0.0
+
+    - name: Load release signing text secrets
+      if: inputs.keystore == 'release'
+      uses: 1password/load-secrets-action@3a12b0ab99d9cd590a3e9b5a90ea017210ed9556 # v4.0.1
+      with:
+        export-env: true
+        unset-previous: true
+      env:
+        RELEASE_KEYSTORE_PASSWORD: op://github/android-signing/RELEASE_KEYSTORE_PASSWORD
+        RELEASE_KEY_ALIAS: op://github/android-signing/RELEASE_KEY_ALIAS
+        RELEASE_KEY_PASSWORD: op://github/android-signing/RELEASE_KEY_PASSWORD
+
+    - name: Load debug signing text secrets
+      if: inputs.keystore == 'debug'
+      uses: 1password/load-secrets-action@3a12b0ab99d9cd590a3e9b5a90ea017210ed9556 # v4.0.1
+      with:
+        export-env: true
+        unset-previous: true
+      env:
+        DEBUG_KEYSTORE_PASSWORD: op://github/android-signing/DEBUG_KEYSTORE_PASSWORD
+        DEBUG_KEY_ALIAS: op://github/android-signing/DEBUG_KEY_ALIAS
+        DEBUG_KEY_PASSWORD: op://github/android-signing/DEBUG_KEY_PASSWORD
+
+    - name: Materialize keystore file
+      id: materialize
+      shell: bash
+      env:
+        KEYSTORE: ${{ inputs.keystore }}
+      run: |
+        set -euo pipefail
+        if [ "$KEYSTORE" = "release" ]; then
+          op_ref="op://github/android-signing/release.jks"
+          dest="$RUNNER_TEMP/release.jks"
+          env_name="RELEASE_KEYSTORE_FILE"
+        else
+          op_ref="op://github/android-signing/debug.keystore"
+          dest="$RUNNER_TEMP/debug.keystore"
+          env_name="DEBUG_KEYSTORE_FILE"
+        fi
+        # op writes the attachment straight to disk; the bytes never transit a
+        # log or an env var. The destination path is not secret. --force skips the
+        # overwrite-confirmation prompt so a re-run or a persistent/self-hosted
+        # runner (where $dest may already exist) cannot hang waiting on stdin.
+        op read "$op_ref" --out-file "$dest" --force
+        chmod 600 "$dest"
+        echo "keystore-path=$dest" >> "$GITHUB_OUTPUT"
+        # Export under the *_KEYSTORE_FILE name app/build.gradle.kts reads so the
+        # signing job consumes this action with no renaming.
+        echo "$env_name=$dest" >> "$GITHUB_ENV"

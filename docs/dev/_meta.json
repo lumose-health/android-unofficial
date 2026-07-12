@@ -3,6 +3,7 @@
   "pages": [
     "instrumented-tests-ci",
     "security-testing",
+    "signing-and-secrets",
     "plugin-architecture",
     "wear-os-architecture"
   ]
