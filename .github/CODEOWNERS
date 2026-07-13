@@ -38,6 +38,19 @@
 /.github/workflows/release.yml @jlengelbrecht @GlycemicGPT/maintainers
 /renovate.json5 @jlengelbrecht @GlycemicGPT/maintainers
 
+# Promotion & release automation config: these files drive the develop->main
+# promotion pipeline (version bumps, changelog generation, cherry-pick sync-back)
+# and the workflow-security allowlist. A careless edit can mis-version a release,
+# corrupt the changelog, or silently widen what the "Workflow Security" gate
+# ignores -- so every change is routed to maintainer review. (Automated bot PRs
+# from release-please / the sync workflow reach these via bypass actors; required
+# status checks still gate the merge.)
+/release-please-config.json @jlengelbrecht @GlycemicGPT/maintainers
+/.release-please-manifest.json @jlengelbrecht @GlycemicGPT/maintainers
+/.github/changelog-pr-config.json @jlengelbrecht @GlycemicGPT/maintainers
+/.github/autolabeler-config.json @jlengelbrecht @GlycemicGPT/maintainers
+/zizmor.yml @jlengelbrecht @GlycemicGPT/maintainers
+
 # Version catalog: Renovate PRs that bump Gradle catalog dependencies touch the
 # catalog, so route it to maintainer review. Tier-B auto-merge PRs bypass this
 # CODEOWNERS request by pre-approved policy (the glycemicgpt-merge bypass actor

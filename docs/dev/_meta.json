@@ -4,6 +4,7 @@
     "instrumented-tests-ci",
     "security-testing",
     "dependency-updates",
+    "release-and-promotion",
     "signing-and-secrets",
     "plugin-architecture",
     "wear-os-architecture"

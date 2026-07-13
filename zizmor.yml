@@ -1,0 +1,65 @@
+# zizmor configuration -- workflow-security allowlist.
+#
+# The "Workflow Security" gate (.github/workflows/workflow-security.yml) runs
+# zizmor over .github/workflows/** and .github/actions/** and FAILS on any
+# finding at Medium severity or above. This file allowlists the specific,
+# individually-reviewed findings that are known-safe, so the gate stays a real
+# failing check for NEW issues instead of being weakened to advisory.
+#
+# Each entry below is a whole-file ignore for ONE audit id: the flagged pattern
+# is the same known-safe construct throughout that file, so a future *different*
+# unsafe construct of another class in the same file is still caught. A new file
+# introducing any of these patterns is NOT covered and will fail the gate.
+#
+# Informational-severity findings (e.g. Low-confidence `template-injection` on
+# controlled `steps.*.outputs.*` paths) are below the gate threshold and are
+# surfaced in the run log without being allowlisted here.
+
+rules:
+  # ---------------------------------------------------------------------------
+  # dangerous-triggers: use of pull_request_target.
+  # All four workflows use pull_request_target deliberately so they work on fork
+  # PRs (base-repo context, writable token). None checks out or executes PR head
+  # code: they read PR metadata via the API, or (attribution-check) fetch PR
+  # commits into a remote-only ref for text-only inspection. See each file's
+  # header and CONTRIBUTING.md "How CI Handles Fork PRs".
+  # Whole-file (not line-scoped) is intentional: zizmor attributes this finding to
+  # the trigger, so line-scoping would suppress the same finding either way. The
+  # regression this could otherwise mask -- adding a PR-head checkout to one of
+  # these files -- is caught independently by the "Guard pull_request_target
+  # against PR-code checkout" step in workflow-security.yml.
+  # ---------------------------------------------------------------------------
+  dangerous-triggers:
+    ignore:
+      # Reads PR file list + labels via API only; no checkout, no PR code.
+      - auto-merge-renovate.yml
+      # Reads PR file list via API only; no checkout, no PR code.
+      - renovate-file-scope.yml
+      # Reads PR metadata via API; checks out the BASE ref with
+      # persist-credentials: false; never the PR head.
+      - auto-label.yml
+      # Checks out the base ref only; fetches PR commits into a remote-only ref
+      # for grep/sed text inspection; never materialises or runs PR files.
+      - attribution-check.yml
+
+  # NOTE: the github-env finding on the op-load-signing-secrets composite action is
+  # suppressed INLINE at the finding site (a `# zizmor: ignore[github-env]` on its
+  # run: step), not here -- inline is the documented mechanism for composite-action
+  # findings and is robust across zizmor versions and line shifts. See that file
+  # for the rationale (controlled $RUNNER_TEMP keystore path, no attacker input).
+
+  # ---------------------------------------------------------------------------
+  # artipacked: checkout persists credentials (no persist-credentials: false).
+  # These three checkout steps use a scoped App token *because they push*
+  # (changelog branch / sync branch / fallback version bump). Credential
+  # persistence is required for the push and none of them upload the checkout
+  # (or .git) as an artifact, so the credential cannot leak. persist-credentials:
+  # false is used everywhere in this repo that does NOT need to push.
+  # Line-scoped so a *different* token checkout added to any of these files later
+  # is still caught.
+  # ---------------------------------------------------------------------------
+  artipacked:
+    ignore:
+      - changelog-pr.yml:46
+      - sync-main-to-develop.yml:37
+      - release.yml:144
