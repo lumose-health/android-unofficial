@@ -194,6 +194,9 @@ third-party action is not pinned to a full commit SHA and (b) rejects any
 `secrets.*` reference inside a composite action; the local `actionlint` command
 alone does not check those two guards.
 
-That gradle resolution succeeds with locking enabled (and that lockfiles are complete) can be
-confirmed with any resolving task, e.g. `./gradlew help` or `./gradlew resolveAndLockAll
---write-locks` (which should produce no lockfile diff on an unchanged tree).
+That gradle resolution succeeds with locking enabled AND that the committed lockfiles are
+complete is verified with a task that actually resolves the locked classpaths: run
+`./gradlew resolveAndLockAll --write-locks`, which must produce no lockfile diff on an unchanged
+tree (or inspect a module's resolved graph with `./gradlew :app:dependencies`). `./gradlew help`
+prints BUILD SUCCESSFUL without resolving any configuration, so it does not validate lockfile
+completeness.

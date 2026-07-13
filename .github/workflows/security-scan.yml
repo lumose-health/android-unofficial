@@ -62,7 +62,9 @@ jobs:
           # JavaSake is currently consumed as the Maven artifact
           # org.openminimed:javasake (no vendored source in-tree), so this
           # exclusion is inert today but retained for the re-vendor case.
-          # .gradle is build cache, never source.
+          # .gradle is build cache, never source. tools/ (the medtronic-ble-spike
+          # Sake crypto RE) is included so the SAST scope matches the dependency
+          # scan, which already covers its lockfile.
           EXIT=0
           semgrep scan \
             --config p/kotlin \
@@ -71,7 +73,7 @@ jobs:
             --exclude 'AesEcb.java' \
             --exclude '.gradle' \
             --json --output semgrep-kotlin.json \
-            app/ wear-device/ watchface/ plugins/ || EXIT=$?
+            app/ wear-device/ watchface/ plugins/ tools/ || EXIT=$?
           echo "SEMGREP_EXIT=$EXIT" >> "$GITHUB_ENV"
           echo "Semgrep exit code: $EXIT"
 
@@ -91,6 +93,19 @@ jobs:
           if [ "${SEMGREP_EXIT:-2}" -ge 2 ]; then
             echo "::error::Semgrep exited ${SEMGREP_EXIT} (scanner error, failing closed)"
             exit 1
+          fi
+
+          # Non-blocking visibility: Semgrep records unparseable files in
+          # .errors[] WITHOUT bumping its exit code, so a file whose findings
+          # were silently dropped would otherwise leave no signal. Surface it as
+          # a warning only -- the PASS/FAIL policy below is unchanged (block only
+          # on ERROR-severity results + scanner exit >= 2). Match both schema
+          # forms: the string type "Syntax error" and the array form
+          # ["PartialParsing", ...] this Semgrep version emits.
+          PARSE=$(jq '[.errors[]? | select((.type == "Syntax error") or (.type[0]? == "PartialParsing"))] | length' semgrep-kotlin.json)
+          if [ "$PARSE" -gt 0 ]; then
+            echo "::warning::Semgrep could not parse ${PARSE} file(s) -- their SAST findings were skipped:"
+            jq -r '.errors[]? | select((.type == "Syntax error") or (.type[0]? == "PartialParsing")) | "  " + (.path // .location.path // "?")' semgrep-kotlin.json | sort -u
           fi
 
           HIGH=$(jq '[.results[] | select(.extra.severity == "ERROR")] | length' semgrep-kotlin.json)

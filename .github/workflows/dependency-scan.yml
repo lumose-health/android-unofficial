@@ -75,10 +75,15 @@ jobs:
         run: |
           # --recursive auto-discovers every gradle.lockfile in the tree. The
           # root settings-gradle.lockfile has a non-standard basename, so it
-          # needs the explicit gradle.lockfile parse-as hint.
+          # needs the explicit gradle.lockfile parse-as hint. --no-ignore stops
+          # --recursive from honoring .gitignore, so a future lockfile-matching
+          # ignore rule or a moved module cannot silently drop a lockfile from
+          # the scan while the gate stays green. The CI checkout contains only
+          # committed files (no build/ dirs), so there is no over-scan risk.
           osv-scanner scan \
             --lockfile=gradle.lockfile:settings-gradle.lockfile \
             --recursive \
+            --no-ignore \
             --config=osv-scanner.toml \
             .
 
