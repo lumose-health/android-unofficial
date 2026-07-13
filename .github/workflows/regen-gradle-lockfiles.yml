@@ -84,10 +84,12 @@ jobs:
 
       # Executes build scripts from the PR branch. This job must stay
       # credential-free: no app token is ever minted here.
+      #
+      # tools/medtronic-ble-spike is intentionally NOT regenerated here: it is a
+      # standalone build outside Renovate scope (ignorePaths: ["tools/**"] in
+      # renovate.json5), so Renovate never opens a PR that changes its lockfile.
       - name: Regenerate lockfiles
-        run: |
-          ./gradlew resolveAndLockAll --write-locks --console=plain
-          (cd tools/medtronic-ble-spike && ./gradlew dependencies --write-locks --console=plain > /dev/null)
+        run: ./gradlew resolveAndLockAll --write-locks --console=plain
 
       - name: Detect lockfile changes
         id: diff
@@ -145,6 +147,7 @@ jobs:
         env:
           PUSH_TOKEN: ${{ steps.generate-token.outputs.token }}
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          REPO: ${{ github.repository }}
         run: |
           git config core.hooksPath /dev/null
           git config user.name "glycemicgpt-renovate[bot]"
@@ -156,4 +159,4 @@ jobs:
           fi
           # --signoff satisfies this repo's DCO check on the Renovate PR.
           git commit --signoff -m "chore(deps): refresh gradle lockfiles"
-          git push "https://x-access-token:${PUSH_TOKEN}@github.com/${{ github.repository }}.git" "HEAD:${HEAD_REF}"
+          git push "https://x-access-token:${PUSH_TOKEN}@github.com/${REPO}.git" "HEAD:${HEAD_REF}"

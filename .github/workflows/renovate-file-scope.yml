@@ -1,0 +1,114 @@
+name: Renovate File Scope
+
+# Required status check that constrains WHAT an auto-merge Renovate PR may
+# touch. It re-evaluates on every branch head and on every label change, so a
+# commit pushed after auto-merge is enabled cannot smuggle an out-of-scope file
+# past the gate. Registering it as a required check on develop is a maintainer
+# go-live step (see docs/dev/dependency-updates.md); until then it reports its
+# status but nothing enforces it.
+#
+# For a PR authored by glycemicgpt-renovate[bot] AND carrying the `automerge`
+# label, the job FAILS when a changed file is either:
+#   (a) outside the auto-merge file allowlist, or
+#   (b) inside the allowlist but outside the union of the gate paths-filters
+#       ("allowlist minus gate-coverage" gap) -- a file there would auto-merge
+#       unbuilt and unscanned because the gates that green-skip would skip it.
+# Every other PR (no `automerge` label, or not a Renovate PR) is a no-op PASS,
+# so this required check never blocks ordinary human PRs.
+#
+# pull_request_target (base-branch workflow definition) is deliberate: the gate
+# must evaluate its OWN trusted logic, not a version the PR under review could
+# have edited. The job performs no checkout and runs no PR code -- it only reads
+# the PR's changed-file list and labels through the API with a read-only token.
+
+on:
+  pull_request_target:
+    branches: [main, develop]
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  # Least privilege: the only API call lists the PR's changed files, which needs
+  # pull-requests: read. No repository contents are read.
+  pull-requests: read
+
+concurrency:
+  group: renovate-file-scope-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  file-scope:
+    name: Renovate File Scope
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Evaluate changed files against the auto-merge scope
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+          HAS_AUTOMERGE: ${{ contains(github.event.pull_request.labels.*.name, 'automerge') }}
+        run: |
+          set -euo pipefail
+
+          # No-op pass for anything that is not an auto-merge Renovate PR. The
+          # `automerge` label is the trigger for real auto-merge, so it is the
+          # trigger for this enforcement too.
+          if [ "$AUTHOR" != "glycemicgpt-renovate[bot]" ] || [ "$HAS_AUTOMERGE" != "true" ]; then
+            echo "::notice::not an automerge Renovate PR -- Renovate File Scope is a no-op pass"
+            exit 0
+          fi
+
+          # --- Auto-merge file allowlist. A labeled Renovate PR may ONLY touch
+          #     these. Keep in sync with docs/dev/dependency-updates.md. ---
+          ALLOWLIST_RE='^((.*/)?build\.gradle\.kts|(.*/)?gradle\.lockfile|gradle/libs\.versions\.toml|settings\.gradle\.kts|settings-gradle\.lockfile)$'
+
+          # --- Gate coverage: the UNION of the paths-filters of the required
+          #     gates that green-skip -- Android Gate (android.yml `android`
+          #     filter) and Dependency Scan Gate (dependency-scan.yml `deps`
+          #     filter). Security Scan Gate has no paths-filter (it runs on every
+          #     PR), so it green-skips nothing and adds nothing to this union;
+          #     it also neither builds nor scans a dependency change, so a file
+          #     covered ONLY by "Security runs" would still merge unbuilt and
+          #     unscanned. An allowlist file matched by NEITHER gate is in the
+          #     coverage gap. Keep in sync with android.yml + dependency-scan.yml. ---
+          GATE_RE='(^(app|wear-device|watchface|plugins|gradle)/)|(^(gradlew|gradlew\.bat|gradle\.properties|osv-scanner\.toml|settings\.gradle\.kts|settings-gradle\.lockfile|build\.gradle\.kts)$)|(^(.*/)?build\.gradle\.kts$)|(^(.*/)?gradle\.lockfile$)|(^gradle/libs\.versions\.toml$)|(^\.github/workflows/(android|dependency-scan)\.yml$)'
+
+          CHANGED=$(gh api --paginate "repos/${GH_REPO}/pulls/${PR}/files" --jq '.[].filename')
+          if [ -z "$CHANGED" ]; then
+            echo "::error::could not read changed files for PR #${PR}"
+            exit 1
+          fi
+          echo "Changed files:"
+          echo "$CHANGED" | awk '{ print "  - " $0 }'
+
+          violations=0
+          while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            # tools/** is out of Renovate scope (ignorePaths in renovate.json5) AND is a
+            # standalone build no required gate covers -- its build scripts are not built by
+            # the Android Gate and its lockfile is not regenerated. Reject it before the generic
+            # Gradle patterns so a tools/ change can never ride an automerge label.
+            case "$f" in
+              tools/*)
+                echo "::error::out-of-scope file for an automerge Renovate PR (tools/ is human-only, no gate builds it): ${f}"
+                violations=1
+                continue
+                ;;
+            esac
+            if ! printf '%s\n' "$f" | grep -qE "$ALLOWLIST_RE"; then
+              echo "::error::out-of-scope file for an automerge Renovate PR: ${f}"
+              violations=1
+              continue
+            fi
+            if ! printf '%s\n' "$f" | grep -qE "$GATE_RE"; then
+              echo "::error::allowlisted but outside all gate paths-filters (would auto-merge unbuilt/unscanned): ${f}"
+              violations=1
+            fi
+          done < <(printf '%s\n' "$CHANGED")
+
+          if [ "$violations" -ne 0 ]; then
+            echo "::error::Renovate File Scope failed -- this PR must not auto-merge; remove the automerge label and review manually."
+            exit 1
+          fi
+          echo "::notice::all changed files are in-scope and gate-covered -- auto-merge is permitted"

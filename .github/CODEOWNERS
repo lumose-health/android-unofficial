@@ -36,7 +36,14 @@
 
 # Release & CI configuration: project lead explicitly requested
 /.github/workflows/release.yml @jlengelbrecht @GlycemicGPT/maintainers
-/.github/renovate.json5 @jlengelbrecht @GlycemicGPT/maintainers
+/renovate.json5 @jlengelbrecht @GlycemicGPT/maintainers
+
+# Version catalog: Renovate PRs that bump Gradle catalog dependencies touch the
+# catalog, so route it to maintainer review. Tier-B auto-merge PRs bypass this
+# CODEOWNERS request by pre-approved policy (the glycemicgpt-merge bypass actor
+# skips the approval requirement; required status checks still gate the merge).
+# Manual-tier Renovate PRs and human edits stop here for review.
+/gradle/libs.versions.toml @jlengelbrecht @GlycemicGPT/maintainers
 
 # Device data driver plugins: safety-critical BLE parsing and
 # SafetyLimits enforcement. Maintainer review required on every change.

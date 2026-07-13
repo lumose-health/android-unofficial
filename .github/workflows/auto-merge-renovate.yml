@@ -1,0 +1,149 @@
+name: Auto-merge Renovate PRs
+
+# Label-relay: when Renovate labels a dependency PR `automerge` (per the Tier B
+# rule in renovate.json5), this enables GitHub native auto-merge using the
+# glycemicgpt-merge App token -- a bypass actor on develop's ruleset. The
+# required status checks (Android Gate, Security Scan Gate, Dependency Scan
+# Gate, and "Renovate File Scope") still gate the actual merge; the bypass only
+# skips the CODEOWNERS approval requirement, never a failing check.
+#
+# DORMANT until go-live. This workflow is inert until a maintainer (a) enables
+# the Renovate app and (b) registers glycemicgpt-merge as a bypass actor on
+# develop. It is landed correct-but-dormant -- there is intentionally no
+# temporary disable to remove later.
+#
+# Trigger is the label event (labeled/unlabeled/synchronize) plus `edited`, NOT
+# `opened`, because Renovate attaches labels via a separate API call AFTER the PR
+# is created, so the label state is only reliably present on the later events.
+# `edited` is included so that retargeting the PR's base branch re-runs this
+# workflow -- a queued auto-merge on a PR moved off develop is then retracted by
+# the disable step below.
+# Including `labeled` means a human with triage rights could in principle add
+# the `automerge` label to a Renovate PR -- but that is NOT what authorizes the
+# merge here: the enable step below withholds auto-merge unless the manual-review
+# labels are all absent, and the separate required "Renovate File Scope" check
+# independently constrains the PR's contents on every head. Label provenance is
+# not part of the trust model; the guards are. (Restricting who may manage labels
+# is a go-live operational control -- see docs/dev/dependency-updates.md.)
+#
+# Safe use of pull_request_target: this job performs NO checkout and runs NO
+# PR-authored code -- it only mints the App token and calls `gh pr merge`. The
+# classic pull_request_target risk (executing untrusted head code with secrets)
+# does not apply. The base-branch context is what makes the merge App token and
+# the trusted guards below available regardless of the PR's origin.
+#
+# The file allowlist that constrains WHAT a Renovate PR may touch lives in the
+# separate, required "Renovate File Scope" check (renovate-file-scope.yml),
+# which re-evaluates on every branch head. This relay carries no allowlist of
+# its own.
+
+on:
+  pull_request_target:
+    types: [labeled, unlabeled, synchronize, edited]
+
+# The workflow's own GITHUB_TOKEN stays read-only; the merge write is carried by
+# the glycemicgpt-merge App token minted in the step below.
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  # One auto-merge decision per PR at a time. Enabling/disabling auto-merge is
+  # idempotent, so let in-flight runs finish rather than cancel.
+  group: auto-merge-renovate-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  auto-merge:
+    name: Reconcile auto-merge for Renovate PR
+    # Scope the job to same-repo Renovate PRs. The base-branch check is applied
+    # per step (not job-wide) on purpose: a PR retargeted OFF develop -- or one
+    # that loses eligibility (automerge label removed / a blocking label added
+    # after auto-merge was enabled) -- must reach the disable step so its queued
+    # auto-merge is retracted. GitHub native auto-merge is otherwise sticky and a
+    # label change or base change alone never cancels it. glycemicgpt-merge is a
+    # bypass actor on main too, so retracting on a main-retarget matters.
+    #   - author is glycemicgpt-renovate[bot] (cannot be impersonated);
+    #   - same-repo head (defense in depth, mirrors regen-gradle-lockfiles.yml).
+    if: >-
+      github.event.pull_request.user.login == 'glycemicgpt-renovate[bot]'
+      && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Generate token for glycemicgpt-merge
+        id: merge-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.MERGE_APP_ID }}
+          private-key: ${{ secrets.MERGE_APP_PRIVATE_KEY }}
+          # Least privilege: enabling/disabling auto-merge needs only
+          # pull-requests write; without this the token inherits every
+          # permission of the glycemicgpt-merge installation.
+          permission-pull-requests: write
+
+      - name: Enable auto-merge
+        # Eligibility -- ALL must hold:
+        #   1. the PR targets develop (never main -- glycemicgpt-merge is a bypass
+        #      actor on main too); AND
+        #   2. the `automerge` label is present (set only by Renovate's Tier B
+        #      rule under normal operation); AND
+        #   3. none of the manual-review labels are present. Any one of them
+        #      means a human must merge, so auto-merge is withheld even if
+        #      `automerge` was also applied (label-race / mislabelling defense).
+        # `--auto` only queues the merge; GitHub holds it until every required
+        # status check passes against the current head, then merges.
+        if: >-
+          github.event.pull_request.base.ref == 'develop'
+          && contains(github.event.pull_request.labels.*.name, 'automerge')
+          && !contains(github.event.pull_request.labels.*.name, 'security')
+          && !contains(github.event.pull_request.labels.*.name, 'needs-review')
+          && !contains(github.event.pull_request.labels.*.name, 'major')
+          && !contains(github.event.pull_request.labels.*.name, 'build-toolchain')
+          && !contains(github.event.pull_request.labels.*.name, 'security-sensitive')
+          && !contains(github.event.pull_request.labels.*.name, 'prerelease')
+          && !contains(github.event.pull_request.labels.*.name, 'ci-actions')
+        env:
+          GH_TOKEN: ${{ steps.merge-token.outputs.token }}
+          # Required: this job has no checkout, so `gh` has no git context to
+          # infer the repo from. Without GH_REPO, `gh pr merge` errors with "no
+          # GitHub repo selected" and auto-merge silently never fires.
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          gh pr merge --auto --squash "$PR"
+          echo "::notice::auto-merge enabled for PR #$PR"
+
+      - name: Disable auto-merge (no longer eligible)
+        # The exact negation of the enable guard: the PR is off develop, the
+        # `automerge` label is gone, or a blocking label is now present. Retract
+        # any queued auto-merge so removing the label (or a late security/major
+        # label, or a base retarget) actually stops the merge. Query the PR's
+        # auto-merge state first and only disable when it is actually enabled, so
+        # a transient API/auth failure surfaces as a failed job instead of being
+        # masked as "nothing to disable" -- otherwise a queued merge could slip
+        # through once checks pass.
+        if: >-
+          github.event.pull_request.base.ref != 'develop'
+          || !contains(github.event.pull_request.labels.*.name, 'automerge')
+          || contains(github.event.pull_request.labels.*.name, 'security')
+          || contains(github.event.pull_request.labels.*.name, 'needs-review')
+          || contains(github.event.pull_request.labels.*.name, 'major')
+          || contains(github.event.pull_request.labels.*.name, 'build-toolchain')
+          || contains(github.event.pull_request.labels.*.name, 'security-sensitive')
+          || contains(github.event.pull_request.labels.*.name, 'prerelease')
+          || contains(github.event.pull_request.labels.*.name, 'ci-actions')
+        env:
+          GH_TOKEN: ${{ steps.merge-token.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          enabled=$(gh pr view "$PR" --json autoMergeRequest \
+            --jq 'if .autoMergeRequest == null then "false" else "true" end')
+          if [ "$enabled" = "true" ]; then
+            gh pr merge --disable-auto "$PR"
+            echo "::notice::auto-merge disabled for PR #$PR (no longer eligible)"
+          else
+            echo "::notice::auto-merge was not enabled for PR #$PR; nothing to disable"
+          fi
