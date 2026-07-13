@@ -1,0 +1,129 @@
+name: Dependency Vulnerability Scan
+
+# CVE scanning for this repository's Gradle dependency tree. OSV-Scanner reads
+# the committed gradle.lockfile files (it does not parse build.gradle.kts or
+# libs.versions.toml), so dependency locking -- already enabled in the root
+# build.gradle.kts -- is what gives this gate something to scan. Ported from
+# the platform monorepo's dependency-scan.yml, narrowed to the Android build
+# (the Python/JS lockfiles do not exist here).
+#
+# The trigger paths and the scanned targets are kept consistent: any file that
+# can change the resolved graph (build scripts, the version catalog, a
+# lockfile, or the suppression config) re-runs the scan.
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    - cron: '0 6 * * 1'  # Weekly Monday 06:00 UTC -- catches newly disclosed CVEs
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  # dorny/paths-filter reads the PR's changed files on pull_request runs.
+  pull-requests: read
+
+concurrency:
+  group: dep-scan-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  detect-changes:
+    name: Detect Dependency Changes
+    runs-on: ubuntu-latest
+    outputs:
+      should_scan: ${{ steps.filter.outputs.deps }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4.0.2
+        id: filter
+        with:
+          filters: |
+            deps:
+              - '**/build.gradle.kts'
+              - 'gradle/libs.versions.toml'
+              - '**/gradle.lockfile'
+              - 'settings-gradle.lockfile'
+              - 'osv-scanner.toml'
+              - '.github/workflows/dependency-scan.yml'
+
+  scan:
+    name: OSV-Scanner
+    needs: detect-changes
+    if: |
+      needs.detect-changes.outputs.should_scan == 'true' ||
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install OSV-Scanner
+        # Same pinned version the platform monorepo uses. Built from source on
+        # the runner's preinstalled Go toolchain -- no third-party action to pin.
+        run: |
+          go install github.com/google/osv-scanner/v2/cmd/osv-scanner@v2.3.3
+          echo "$HOME/go/bin" >> "$GITHUB_PATH"
+
+      - name: Run OSV-Scanner
+        run: |
+          # --recursive auto-discovers every gradle.lockfile in the tree. The
+          # root settings-gradle.lockfile has a non-standard basename, so it
+          # needs the explicit gradle.lockfile parse-as hint. --no-ignore stops
+          # --recursive from honoring .gitignore, so a future lockfile-matching
+          # ignore rule or a moved module cannot silently drop a lockfile from
+          # the scan while the gate stays green. The CI checkout contains only
+          # committed files (no build/ dirs), so there is no over-scan risk.
+          osv-scanner scan \
+            --lockfile=gradle.lockfile:settings-gradle.lockfile \
+            --recursive \
+            --no-ignore \
+            --config=osv-scanner.toml \
+            .
+
+  dep-scan-gate:
+    name: Dependency Scan Gate
+    runs-on: ubuntu-latest
+    needs: [detect-changes, scan]
+    if: always()
+    steps:
+      - name: Evaluate result
+        env:
+          DETECT_RESULT: ${{ needs.detect-changes.result }}
+          SHOULD_SCAN: ${{ needs.detect-changes.outputs.should_scan }}
+          SCAN_RESULT: ${{ needs.scan.result }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [ "$DETECT_RESULT" != "success" ]; then
+            echo "detect-changes failed (result: $DETECT_RESULT)"
+            exit 1
+          fi
+
+          # Scheduled/manual runs always require scan success.
+          if [ "$EVENT_NAME" = "schedule" ] || [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            if [ "$SCAN_RESULT" = "success" ]; then
+              echo "Dependency scan passed (triggered by $EVENT_NAME)"
+              exit 0
+            fi
+            echo "Dependency scan failed (result: $SCAN_RESULT)"
+            exit 1
+          fi
+
+          # Push/PR: skip cleanly if no dependency-relevant changes.
+          if [ "$SHOULD_SCAN" != "true" ]; then
+            echo "No dependency changes -- skipped"
+            exit 0
+          fi
+
+          if [ "$SCAN_RESULT" = "success" ]; then
+            echo "Dependency scan passed"
+            exit 0
+          fi
+          echo "Dependency scan failed or was cancelled (result: $SCAN_RESULT)"
+          exit 1

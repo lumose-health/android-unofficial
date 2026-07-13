@@ -9,9 +9,15 @@ concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
+# Least privilege: the default GITHUB_TOKEN is read-only for every job. Each
+# actual write in this workflow -- release PRs, tags, releases, PR merges, and
+# APK asset uploads -- is performed with a scoped GitHub App token (release-please
+# and the fallback checkout receive it directly -- the latter persists
+# credentials for its git push; auto-merge and the upload step export it as
+# GH_TOKEN), never with the ambient GITHUB_TOKEN, and read-only checkouts use
+# persist-credentials: false. So no job needs a write grant.
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
   release-please:
@@ -164,9 +170,11 @@ jobs:
           VERSION="${MAJOR}.${MINOR}.${NEXT_PATCH}"
           TAG="v${VERSION}"
 
-          echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "tag_name=$TAG" >> "$GITHUB_OUTPUT"
+          {
+            echo "current=$CURRENT"
+            echo "version=$VERSION"
+            echo "tag_name=$TAG"
+          } >> "$GITHUB_OUTPUT"
 
           # Idempotency: if this tag already exists (workflow rerun after
           # successful first run), skip version bump but still set outputs

@@ -1,0 +1,122 @@
+name: Security Scan
+
+# Android SAST gate for this repository. Runs Semgrep over the Kotlin/Java
+# sources (app/, wear-device/, watchface/, plugins/) and fails on HIGH/ERROR
+# findings.
+#
+# This is the mobile carve-out of the platform monorepo's multi-language
+# security-scan.yml -- only the "Semgrep Kotlin (Mobile)" lane applies here.
+# The backend lanes (Semgrep Python/TypeScript, DAST, ZAP, nuclei, the Docker
+# test stack) target services this repository does not contain and are
+# intentionally NOT ported -- they would be perpetually red. See
+# docs/dev/security-testing.md for the full "kept vs dropped" rationale.
+#
+# One job by design (the required check is a single status). No detect-changes
+# fan-out: the scan runs on every PR so the required "Security Scan Gate" status
+# always reports; a Kotlin scan of an unchanged tree is cheap and stays green.
+#
+# Gate policy: fail on HIGH/ERROR-severity findings only, mirroring the
+# monorepo's evaluate-sast.py (WARNING/INFO are surfaced but non-blocking). The
+# heavier evaluate-sast.py + create-finding-issues.py machinery is deliberately
+# NOT ported: it depends on the org SECURITY GitHub App and a scripts/security/
+# Python toolchain that does not exist in this mobile-only repo. A plain
+# exit-non-zero-on-ERROR gate is sufficient; GitGuardian (org-wide) and
+# CodeRabbit already surface findings on the PR itself.
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-scan-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  security-scan-gate:
+    name: Security Scan Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install Semgrep
+        # Pinned for reproducibility. The p/kotlin, p/java and p/secrets rule
+        # packs are still fetched from the Semgrep registry at scan time, so
+        # rule *content* can move between runs even with the CLI pinned.
+        run: pip install semgrep==1.169.0
+
+      - name: Run Semgrep (Kotlin/Java + secrets)
+        run: |
+          # AesEcb.java is vendored from OpenMinimed JavaSake and is
+          # re-vendored, not patched, on upstream bumps (#695/#696) -- excluded
+          # so its intentional legacy AES/ECB usage never fails this gate.
+          # JavaSake is currently consumed as the Maven artifact
+          # org.openminimed:javasake (no vendored source in-tree), so this
+          # exclusion is inert today but retained for the re-vendor case.
+          # .gradle is build cache, never source. tools/ (the medtronic-ble-spike
+          # Sake crypto RE) is included so the SAST scope matches the dependency
+          # scan, which already covers its lockfile.
+          EXIT=0
+          semgrep scan \
+            --config p/kotlin \
+            --config p/java \
+            --config p/secrets \
+            --exclude 'AesEcb.java' \
+            --exclude '.gradle' \
+            --json --output semgrep-kotlin.json \
+            app/ wear-device/ watchface/ plugins/ tools/ || EXIT=$?
+          echo "SEMGREP_EXIT=$EXIT" >> "$GITHUB_ENV"
+          echo "Semgrep exit code: $EXIT"
+
+      - name: Upload Semgrep results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: semgrep-kotlin
+          path: semgrep-kotlin.json
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Gate on HIGH/ERROR findings
+        run: |
+          # Exit >= 2 means Semgrep itself errored (exit 1 is the normal
+          # "findings were produced" code). A crashed scanner must fail closed.
+          if [ "${SEMGREP_EXIT:-2}" -ge 2 ]; then
+            echo "::error::Semgrep exited ${SEMGREP_EXIT} (scanner error, failing closed)"
+            exit 1
+          fi
+
+          # Non-blocking visibility: Semgrep records unparseable files in
+          # .errors[] WITHOUT bumping its exit code, so a file whose findings
+          # were silently dropped would otherwise leave no signal. Surface it as
+          # a warning only -- the PASS/FAIL policy below is unchanged (block only
+          # on ERROR-severity results + scanner exit >= 2). Match both schema
+          # forms: the string type "Syntax error" and the array form
+          # ["PartialParsing", ...] this Semgrep version emits.
+          PARSE=$(jq '[.errors[]? | select((.type == "Syntax error") or (.type[0]? == "PartialParsing"))] | length' semgrep-kotlin.json)
+          if [ "$PARSE" -gt 0 ]; then
+            echo "::warning::Semgrep could not parse ${PARSE} file(s) -- their SAST findings were skipped:"
+            jq -r '.errors[]? | select((.type == "Syntax error") or (.type[0]? == "PartialParsing")) | "  " + (.path // .location.path // "?")' semgrep-kotlin.json | sort -u
+          fi
+
+          HIGH=$(jq '[.results[] | select(.extra.severity == "ERROR" or .extra.severity == "HIGH" or .extra.severity == "CRITICAL")] | length' semgrep-kotlin.json)
+          WARN=$(jq '[.results[] | select(.extra.severity == "WARNING")] | length' semgrep-kotlin.json)
+          echo "Semgrep findings: ${HIGH} HIGH/ERROR, ${WARN} WARNING (non-blocking)"
+
+          if [ "$HIGH" -gt 0 ]; then
+            jq -r '.results[] | select(.extra.severity == "ERROR" or .extra.severity == "HIGH" or .extra.severity == "CRITICAL")
+                   | "  [HIGH] \(.check_id | split(".") | last) \(.path):\(.start.line) -- \((.extra.message // "")[0:160])"' \
+              semgrep-kotlin.json
+            echo "::error::Semgrep SAST found ${HIGH} HIGH/ERROR-severity finding(s) -- see above"
+            exit 1
+          fi
+          echo "SAST passed: no HIGH/ERROR findings"
