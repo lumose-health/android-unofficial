@@ -108,12 +108,12 @@ jobs:
             jq -r '.errors[]? | select((.type == "Syntax error") or (.type[0]? == "PartialParsing")) | "  " + (.path // .location.path // "?")' semgrep-kotlin.json | sort -u
           fi
 
-          HIGH=$(jq '[.results[] | select(.extra.severity == "ERROR")] | length' semgrep-kotlin.json)
+          HIGH=$(jq '[.results[] | select(.extra.severity == "ERROR" or .extra.severity == "HIGH" or .extra.severity == "CRITICAL")] | length' semgrep-kotlin.json)
           WARN=$(jq '[.results[] | select(.extra.severity == "WARNING")] | length' semgrep-kotlin.json)
           echo "Semgrep findings: ${HIGH} HIGH/ERROR, ${WARN} WARNING (non-blocking)"
 
           if [ "$HIGH" -gt 0 ]; then
-            jq -r '.results[] | select(.extra.severity == "ERROR")
+            jq -r '.results[] | select(.extra.severity == "ERROR" or .extra.severity == "HIGH" or .extra.severity == "CRITICAL")
                    | "  [HIGH] \(.check_id | split(".") | last) \(.path):\(.start.line) -- \((.extra.message // "")[0:160])"' \
               semgrep-kotlin.json
             echo "::error::Semgrep SAST found ${HIGH} HIGH/ERROR-severity finding(s) -- see above"
