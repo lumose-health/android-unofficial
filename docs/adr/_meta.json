@@ -1,0 +1,8 @@
+{
+  "title": "Architecture Decisions",
+  "pages": [
+    "0001-api-versioning-and-compat-signal",
+    "0002-backend-tolerant-reader-compat",
+    "0003-contract-drift-strategy"
+  ]
+}
