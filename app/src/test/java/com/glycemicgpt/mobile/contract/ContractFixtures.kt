@@ -4,7 +4,7 @@ import org.json.JSONObject
 import java.io.File
 
 /**
- * Shared helpers for the cross-repo contract guards (GLY-92 / 56.9).
+ * Shared helpers for the cross-repo contract guards (GLY-92).
  *
  * Both the contract smoke test and the safety-constant drift guard need to read
  * files from the repo root (the vendored OpenAPI pin, and production Kotlin

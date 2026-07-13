@@ -14,7 +14,7 @@ import org.junit.Test
 import java.time.Instant
 
 /**
- * Cross-repo safety-constant drift guard (GLY-92 / 56.9, AC3 + AC6).
+ * Cross-repo safety-constant drift guard (GLY-92, AC3 + AC6).
  *
  * Three constants are duplicated between this app and the backend monorepo. If
  * they silently desync across the independent release cadences, glucose is
@@ -150,14 +150,19 @@ class SafetyConstantDriftGuardTest {
     )
 
     /**
-     * Occurrences of [token] in [text], with **digit boundaries** so a widening
-     * drift is caught. Plain substring matching would let `20..500` -> `20..5000`
-     * or `18.0156` -> `18.01565` slip through (the old token is a prefix of the
-     * new) -- exactly the unsafe direction. The lookarounds reject a digit
-     * immediately before or after the token so only the exact numeric value matches.
+     * Occurrences of [token] in [text], with **numeric boundaries** so a widening
+     * or precision drift is caught. Plain substring matching would let
+     * `20..500` -> `20..5000`, `18.0156` -> `18.01565`, or `18.0156` -> `18.0156e1`
+     * slip through (the old token is a prefix of the new) -- exactly the unsafe
+     * direction. The trailing lookahead rejects a digit, decimal point,
+     * underscore, or exponent marker right after the token, so appending any of
+     * `0-9 . _ e E` no longer matches. The leading lookbehind rejects only a
+     * preceding digit (`120..500`), not `.`/`_`, so a method-call token like
+     * `.coerceIn(20, low)` still matches. (A trailing `L` on `1199145600L` is not
+     * excluded, so the Tandem-epoch token still matches.)
      */
     private fun countOccurrences(text: String, token: String): Int =
-        Regex("(?<![0-9])" + Regex.escape(token) + "(?![0-9])").findAll(text).count()
+        Regex("(?<![0-9])" + Regex.escape(token) + "(?![0-9eE._])").findAll(text).count()
 
     /**
      * Strip `/* */` block comments (incl. KDoc) and `//` line comments so the scan

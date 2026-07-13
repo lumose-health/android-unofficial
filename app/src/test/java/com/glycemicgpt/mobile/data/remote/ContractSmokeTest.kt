@@ -24,7 +24,7 @@ import retrofit2.http.PUT
 import java.lang.reflect.Method
 
 /**
- * Cross-repo contract smoke test (GLY-92 / 56.9, AC2 + AC5).
+ * Cross-repo contract smoke test (GLY-92, AC2 + AC5).
  *
  * Now that the Android app and the backend ship on independent cadences, this
  * guards the HTTP contract from the client side. It exercises the **real**
@@ -32,8 +32,11 @@ import java.lang.reflect.Method
  * and the **real** response DTOs against the vendored, pinned OpenAPI spec.
  *
  * Three invariants:
- *  1. **Golden round-trip** -- a representative payload conforming to the pinned
- *     spec deserializes and populates the fields the app reads.
+ *  1. **Golden round-trip** -- a representative, **hand-authored** payload
+ *     (written to match the pinned spec, not generated from it) deserializes and
+ *     populates the fields the app reads. This gates DTO regressions on the client
+ *     side; it does not by itself detect backend drift -- the spec-coupled
+ *     endpoint/method and field-presence checks below do that.
  *  2. **Additive drift is tolerated** -- an unknown/extra field (a backend that
  *     added a field, or an older client reading a newer server) deserializes
  *     fine. This is the client half of the backend tolerant-reader posture
@@ -256,6 +259,22 @@ class ContractSmokeTest {
             "post",
             listOf("access_token", "refresh_token", "expires_in", "user"),
         )
+        // The Nightscout data response is consumed into Room; the mapper drops any
+        // pump event whose nullable `units` is null, so a silent rename of `units`
+        // would drop all NS bolus/basal and understate IOB. Couple it explicitly,
+        // along with the glucose-reading value the app reads.
+        assertArrayItemFieldsPresent(
+            "/api/integrations/nightscout/{connection_id}/data",
+            "get",
+            "pump_events",
+            listOf("units", "event_type"),
+        )
+        assertArrayItemFieldsPresent(
+            "/api/integrations/nightscout/{connection_id}/data",
+            "get",
+            "glucose_readings",
+            listOf("value"),
+        )
     }
 
     @Test
@@ -286,18 +305,61 @@ class ContractSmokeTest {
         )
     }
 
+    /** Assert every field is declared in the item schema of an array-typed response property. */
+    private fun assertArrayItemFieldsPresent(
+        path: String,
+        method: String,
+        arrayProperty: String,
+        fields: List<String>,
+    ) {
+        val props = arrayItemSchemaProperties(path, method, arrayProperty)
+        val missing = fields.filter { it !in props }
+        assertTrue(
+            "Pinned spec response for $method $path array `$arrayProperty` no longer declares " +
+                "item field(s) $missing (present: $props). A refreshed pin dropped/renamed a " +
+                "field the app reads; reconcile the DTOs with the backend before shipping.",
+            missing.isEmpty(),
+        )
+    }
+
     /** Resolve an endpoint's 200-response schema properties from the pinned spec. */
-    private fun responseSchemaProperties(path: String, method: String): Set<String> {
+    private fun responseSchemaProperties(path: String, method: String): Set<String> =
+        schemaProperties(responseSchema(path, method))
+
+    /** Resolve the item schema properties of an array-typed property on the 200 response. */
+    private fun arrayItemSchemaProperties(
+        path: String,
+        method: String,
+        arrayProperty: String,
+    ): Set<String> {
+        val itemSchema =
+            responseSchema(path, method).getJSONObject("properties")
+                .getJSONObject(arrayProperty).getJSONObject("items")
+        return schemaProperties(itemSchema)
+    }
+
+    /** The resolved 200-response schema object (following its top-level `$ref`). */
+    private fun responseSchema(path: String, method: String): org.json.JSONObject {
         val spec = ContractFixtures.pinnedSpec()
         val schema =
             spec.getJSONObject("paths").getJSONObject(path).getJSONObject(method)
                 .getJSONObject("responses").getJSONObject("200")
                 .getJSONObject("content").getJSONObject("application/json")
                 .getJSONObject("schema")
+        return resolveRef(schema)
+    }
+
+    /** Follow a `$ref` (if present) to its components schema; otherwise return as-is. */
+    private fun resolveRef(schema: org.json.JSONObject): org.json.JSONObject {
+        if (!schema.has("\$ref")) return schema
         val name = schema.getString("\$ref").substringAfterLast('/')
-        val props =
-            spec.getJSONObject("components").getJSONObject("schemas")
-                .getJSONObject(name).getJSONObject("properties")
+        return ContractFixtures.pinnedSpec().getJSONObject("components")
+            .getJSONObject("schemas").getJSONObject(name)
+    }
+
+    private fun schemaProperties(schema: org.json.JSONObject): Set<String> {
+        val resolved = resolveRef(schema)
+        val props = resolved.getJSONObject("properties")
         return props.keys().asSequence().toSet()
     }
 

@@ -60,6 +60,11 @@ Inline `20..500` literals:
 
 - **Example plugins** (`plugins/example/**` — `DemoGlucometerPlugin.kt`, `ReadingSimulator.kt`) encode `20..500` but are sample code, not shipped, so they are intentionally outside the guard.
 - **Comment-only mentions** (e.g. `plugins/shipped/medtronic/.../CgmReader.kt`, `NightscoutDataMapper.kt`) are not code sites; the guard strips comments before counting.
+- **Display-only re-expressions** of the bound that never validate or gate data — cosmetic clamps used only for rendering:
+  - `wear-device/.../presentation/WatchGraphRenderer.kt:76-77` — Y-axis range clamps (`.coerceAtLeast(20)` / `.coerceAtMost(500)`) for the on-watch glucose graph.
+  - `app/.../presentation/settings/SettingsViewModel.kt` — the mmol/L display-range math that re-expresses the 20/500 endpoints when converting threshold inputs for display (near the `MGDL_PER_MMOL` rounding block).
+
+  These affect only what a chart/label shows, not whether a reading is accepted, so a drift here is a display bug, not a safety desync. They are deliberately left out of `SCAN_SITES` to keep the guard focused on validation/gating sites; revisit if any ever feeds a validation path.
 
 ## Known limitation / follow-up
 

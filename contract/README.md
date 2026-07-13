@@ -4,7 +4,7 @@
 repo's `apps/api/contract/openapi.json` — the pinned, versioned snapshot of the
 FastAPI HTTP schema. The app diffs its Retrofit/Moshi surface against this pin so
 a separately-shipped backend cannot silently break the client
-(GLY-92 / Epic 56.9).
+(GLY-92).
 
 | File | Purpose |
 |---|---|

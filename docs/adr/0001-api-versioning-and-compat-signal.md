@@ -5,7 +5,7 @@ description: Decision to leave the backend endpoint-versioning scheme as-is, and
 
 # ADR 0001: API versioning posture and app-compatibility signal
 
-**Status:** Accepted · **Context:** GLY-92 / Epic 56.9 (cross-repo contract discipline, pre-split)
+**Status:** Accepted · **Context:** GLY-92 (cross-repo contract discipline, pre-split)
 
 ## Context
 
@@ -19,10 +19,13 @@ including a self-hosted instance that predates a given app build. Two questions:
 
 ## Decision 1 — endpoint versioning: **LEAVE AS-IS, document**
 
-Today only `/api/v1/devices` (`routers/device_registration.py`) and `/api/v1/alerts`
-(`routers/alert_api.py`, `alert_stream.py`) are version-prefixed; the rest of the
-surface is unversioned (`/api/auth/...`, `/api/settings/...`, `/api/ai/...`,
-`/api/food-records`, `/api/integrations/...`).
+Only a handful of router groups are version-prefixed today — `/api/v1/devices`
+(`routers/device_registration.py`), `/api/v1/alerts` (`routers/alert_api.py`,
+`alert_stream.py`), `/api/v1/api-keys`, and `/api/v1/glucose/stream` — while the
+rest of the surface is unversioned (`/api/auth/...`, `/api/settings/...`,
+`/api/ai/...`, `/api/food-records`, most of `/api/integrations/...`). The split is
+historical, not a designed scheme. Of these, the app currently calls the
+versioned `/api/v1/devices` and `/api/v1/alerts` and many unversioned paths.
 
 We will **not** normalize to `/api/v1` now. Rationale:
 

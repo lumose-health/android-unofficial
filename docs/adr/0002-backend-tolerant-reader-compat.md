@@ -5,7 +5,7 @@ description: Records the backend's existing tolerant-reader behavior as the mech
 
 # ADR 0002: Backend tolerant reader as the cross-cadence compatibility mechanism
 
-**Status:** Accepted · **Context:** GLY-92 / Epic 56.9
+**Status:** Accepted · **Context:** GLY-92
 
 ## Context
 
@@ -19,11 +19,12 @@ here so it is a deliberate, maintained property rather than an accident.
 Treat the backend's **tolerant-reader** behavior as *the* contract-stability
 mechanism across cadences, and preserve it:
 
-- **Legacy-value migration before validation** — the backend upgrades legacy
-  enum/shape values in-place before validating, e.g.
-  `apps/api/src/schemas/pump.py` `migrate_control_iq_mode` (a pre-validation
-  validator that maps older `control_iq_mode` spellings onto the current enum).
-  An older app that sends a legacy value is accepted, not 422'd.
+- **Legacy-value migration before validation** — the backend remaps legacy
+  values in-place before validating, e.g. `apps/api/src/schemas/pump.py`
+  `migrate_control_iq_mode`. The `control_iq_mode` field is a loose `str | None`
+  (not an enum); the migration rewrites the legacy `standard` value to `none`
+  pre-validation, so an older app that still sends `standard` is accepted, not
+  422'd.
 - **Loose-typed pass-through fields** — `raw_events` and `pump_info` on the pump
   push schema are intentionally loosely typed (`Any`), with an explicit
   "shape has drifted slightly" note in `schemas/pump.py`. New optional fields the

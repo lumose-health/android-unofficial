@@ -5,7 +5,7 @@ description: Why the Android contract guard is a Retrofit/Moshi smoke test plus 
 
 # ADR 0003: Contract-drift detection strategy
 
-**Status:** Accepted · **Context:** GLY-92 / Epic 56.9
+**Status:** Accepted · **Context:** GLY-92
 
 ## Context
 
@@ -37,13 +37,18 @@ Instead, `ContractSmokeTest`:
 
 This gives the compatibility signal we need at a fraction of the cost.
 
-**Known blind spot:** the smoke test detects the *removal of a required
-(non-null, no-default) consumed field* because Moshi then throws. If a consumed
-field is nullable or has a Kotlin default, Moshi tolerates its absence, so the
-backend removing it would be classified as additive rather than incompatible.
-Today the safety-relevant consumed fields (glucose bounds, auth tokens) are
-non-null and undefaulted, so their removal *is* caught; keep it that way — do not
-add a default to a field whose absence must be treated as breaking.
+**Known blind spot:** the *round-trip* tests detect the removal of a required
+(non-null, no-default) consumed field because Moshi then throws, but silently
+tolerate the removal of a nullable/defaulted consumed field (it deserializes to
+null). Most safety-relevant consumed fields (glucose bounds, auth tokens) are
+non-null and undefaulted, so their removal *is* caught by the round-trip — keep it
+that way. The exception is the Nightscout `pump_events[].units` field, which is
+nullable-consumed (a null drops the event, understating IOB); it is covered not by
+the round-trip but by the **field-presence coupling** to the pinned spec
+(`assertArrayItemFieldsPresent`), so a rename/removal in a refreshed pin fails.
+When adding a nullable consumed field whose absence would silently degrade a
+safety surface, add it to the field-presence coupling rather than relying on the
+round-trip.
 
 ### Updating the pin
 
