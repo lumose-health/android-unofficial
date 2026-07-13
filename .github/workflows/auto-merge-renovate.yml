@@ -92,7 +92,11 @@ jobs:
         #      means a human must merge, so auto-merge is withheld even if
         #      `automerge` was also applied (label-race / mislabelling defense).
         # `--auto` only queues the merge; GitHub holds it until every required
-        # status check passes against the current head, then merges.
+        # status check passes against the current head, then merges. Query the
+        # PR's auto-merge state first and only enable when it is not already
+        # queued -- re-triggering `gh pr merge --auto` on an already-enabled PR
+        # can exit non-zero and redden this (non-required) relay job for nothing.
+        # A genuine failure to enable still surfaces as a failed job.
         if: >-
           github.event.pull_request.base.ref == 'develop'
           && contains(github.event.pull_request.labels.*.name, 'automerge')
@@ -111,8 +115,15 @@ jobs:
           GH_REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number }}
         run: |
-          gh pr merge --auto --squash "$PR"
-          echo "::notice::auto-merge enabled for PR #$PR"
+          set -euo pipefail
+          enabled=$(gh pr view "$PR" --json autoMergeRequest \
+            --jq 'if .autoMergeRequest == null then "false" else "true" end')
+          if [ "$enabled" = "true" ]; then
+            echo "::notice::auto-merge already enabled for PR #$PR; nothing to do"
+          else
+            gh pr merge --auto --squash "$PR"
+            echo "::notice::auto-merge enabled for PR #$PR"
+          fi
 
       - name: Disable auto-merge (no longer eligible)
         # The exact negation of the enable guard: the PR is off develop, the

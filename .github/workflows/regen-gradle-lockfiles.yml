@@ -157,6 +157,8 @@ jobs:
             echo "::notice::lockfiles already up to date on this head; nothing to push"
             exit 0
           fi
-          # --signoff satisfies this repo's DCO check on the Renovate PR.
+          # --signoff signs THIS lockfile commit for DCO. Renovate's own version-bump commit is
+          # signed separately via gitAuthor + commitBody in renovate.json5 (both commits on the PR
+          # must be signed; this covers only the one made here).
           git commit --signoff -m "chore(deps): refresh gradle lockfiles"
           git push "https://x-access-token:${PUSH_TOKEN}@github.com/${REPO}.git" "HEAD:${HEAD_REF}"

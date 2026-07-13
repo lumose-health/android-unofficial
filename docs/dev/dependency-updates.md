@@ -136,9 +136,15 @@ Renovate runs without an Android SDK, so it cannot refresh the committed `gradle
 when it bumps a Gradle dependency. `regen-gradle-lockfiles.yml` closes that loop on Renovate PRs
 with a two-job privilege split: an unprivileged, credential-free job runs the PR-branch build to
 regenerate the lockfiles and uploads them as an artifact; a privileged job (Renovate App token,
-`contents: write` only, hooks off, pinned to the source SHA) commits them back with `--signoff`
-so the [DCO](../../CONTRIBUTING.md) check passes. `tools/medtronic-ble-spike` is out of Renovate
-scope (`ignorePaths`) and is not regenerated.
+`contents: write` only, hooks off, pinned to the source SHA) commits them back with `--signoff`.
+`tools/medtronic-ble-spike` is out of Renovate scope (`ignorePaths`) and is not regenerated.
+
+Both commits on a Renovate PR must satisfy [DCO](../../CONTRIBUTING.md) (`.github/dco.yml` enforces
+a `Signed-off-by` on every commit, with no bot exemption). They are signed in two different places:
+Renovate's own version-bump commit via `gitAuthor` + `commitBody` in `renovate.json5` (the
+`Signed-off-by` trailer is built from the bot's canonical author identity, so it matches the commit
+author GitHub records); the regenerated-lockfile commit via the `--signoff` above. The regen
+`--signoff` covers only the lockfile commit — it does **not** sign Renovate's bump commit.
 
 ## Reviewing a manual (Tier D) PR
 
