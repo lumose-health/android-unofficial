@@ -74,17 +74,19 @@ Conventional-Commit PR title.
 ### Sync-back conflict resolution
 
 A cherry-pick onto `develop` usually applies cleanly. When it conflicts, the resolver
-takes **main's version for exactly four version files** -- the ones a release bumps:
+takes **main's version** for the files a release commit rewrites:
 
 - `.release-please-manifest.json`
 - `app/build.gradle.kts`
 - `wear-device/build.gradle.kts`
 - `watchface/build.gradle.kts`
+- `CHANGELOG.md` -- release-please maintains it, so a version-sync cherry-pick conflicts
+  on it; force-resolving it to main's authoritative post-release copy keeps develop's
+  changelog in lockstep rather than stalling the sync.
 
-Any *other* file left in conflict (including `CHANGELOG.md`) is **not** force-resolved:
-the workflow aborts the cherry-pick cleanly, pushes nothing, and leaves a warning for a
-manual sync. This is deliberate -- automatic resolution is limited to the version files
-whose "main always wins" rule is unambiguous.
+Any *other* file left in conflict is **not** force-resolved: the workflow aborts the
+cherry-pick cleanly, pushes nothing, and leaves a warning for a manual sync. Automatic
+resolution is limited to the files above, whose "main always wins" rule is unambiguous.
 
 ## CI hygiene gates
 
@@ -101,10 +103,10 @@ Every PR to `develop` runs a set of automation-hygiene checks alongside the buil
   Known-safe findings are listed, one at a time with a rationale, in `zizmor.yml` at the
   repo root. To accept a new known-safe finding, add a scoped entry there **with a comment
   explaining why** -- never lower the severity threshold. Informational findings are shown
-  in the run log but do not fail the build. This gate runs on `pull_request` and checks out
-  the PR to read its workflow files (read-only static analysis -- it never executes them);
-  a companion guard in the same job fails any `pull_request_target` workflow that checks out
-  PR head code.
+  in the run log but do not fail the build. This gate runs on **every PR** (no path
+  filter, so as a required check it is always created) and checks out the PR to read its
+  workflow files (read-only static analysis -- it never executes them); a companion guard
+  in the same job fails any `pull_request_target` workflow that checks out PR head code.
 
 - <a id="auto-label"></a>**Auto Label PRs** -- applies path- and title-derived labels
   (`.github/autolabeler-config.json`) so the changelog taxonomy and Renovate auto-merge

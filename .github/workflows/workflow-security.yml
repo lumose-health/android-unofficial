@@ -27,12 +27,12 @@ on:
       - '.github/actions/**'
       - 'zizmor.yml'
   pull_request:
+    # No paths filter: run on EVERY PR so this check is always created. As a
+    # required check, a paths-filtered job would stay pending (never created) on a
+    # PR that touches only app/ or docs/, wedging the merge. Scanning the ~18
+    # workflow/action files is seconds and stays green on an unchanged tree.
     branches: [main, develop]
     types: [opened, synchronize, reopened]
-    paths:
-      - '.github/workflows/**'
-      - '.github/actions/**'
-      - 'zizmor.yml'
   workflow_dispatch:
 
 permissions:

@@ -129,17 +129,21 @@ jobs:
             echo "Cherry-pick had conflicts, resolving with main's versions..."
             echo "conflict=true" >> "$GITHUB_OUTPUT"
 
-            # Version files: always take main's version (authoritative post-release).
-            # This repo's project root IS the repository root -- the only version
-            # files are release-please's manifest plus the three Android module build
-            # scripts (each carries `val appVersionName = "<version>"`). There is no
-            # backend (pyproject.toml / package.json), so nothing else auto-resolves.
-            # CHANGELOG.md is deliberately NOT in this list: a changelog conflict
-            # aborts cleanly for manual sync rather than being force-resolved.
+            # On conflict, take main's authoritative post-release copy of the files
+            # a release commit rewrites: release-please's manifest and the three
+            # Android module build scripts (each carries `val appVersionName =
+            # "<version>"`), plus CHANGELOG.md. release-please (release-type: simple)
+            # maintains CHANGELOG.md, so a version-sync cherry-pick conflicts on it;
+            # force-resolving it to main's version keeps develop's changelog in
+            # lockstep instead of aborting the whole sync. This repo's project root IS
+            # the repository root; there is no backend (pyproject.toml / package.json)
+            # and no .release-please-changelog.md, so nothing else auto-resolves --
+            # any other conflicting file still trips the guard below and aborts.
             for f in .release-please-manifest.json \
                      app/build.gradle.kts \
                      wear-device/build.gradle.kts \
-                     watchface/build.gradle.kts; do
+                     watchface/build.gradle.kts \
+                     CHANGELOG.md; do
               if git diff --name-only --diff-filter=U 2>/dev/null | grep -q "^${f}$"; then
                 # Only overwrite if the file exists at the source commit
                 if git show "$COMMIT_SHA":"$f" > /dev/null 2>&1; then
