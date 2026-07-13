@@ -105,7 +105,13 @@ runs:
       shell: bash
       env:
         KEYSTORE: ${{ inputs.keystore }}
-      run: |
+      # This step writes RELEASE_KEYSTORE_FILE / DEBUG_KEYSTORE_FILE to $GITHUB_ENV
+      # set to a hardcoded "$RUNNER_TEMP/<name>" path chosen by the literal
+      # `keystore` input ("release"/"debug"). No value on that path is
+      # attacker-controllable, so the write cannot inject code. The zizmor github-env
+      # finding is suppressed inline below (the documented way for composite-action
+      # findings), which travels with the code and survives line shifts.
+      run: |  # zizmor: ignore[github-env]
         set -euo pipefail
         if [ "$KEYSTORE" = "release" ]; then
           op_ref="op://github/android-signing/release.jks"

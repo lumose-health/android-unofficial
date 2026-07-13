@@ -1,0 +1,140 @@
+name: Workflow Security
+
+# Workflow-security static analysis with zizmor. Complements the separate
+# "Workflow Lint" check (actionlint + shellcheck + SHA-pin guard): that gate
+# lints workflow *syntax and shell*; this one audits workflow *security posture*
+# -- the class of attack behind the tj-actions/changed-files and reviewdog 2025
+# incidents.
+#
+# zizmor catches:
+#   - Untrusted input flowing into shell commands (template injection)
+#   - Excessive permissions grants
+#   - Dangerous pull_request_target patterns (fork code execution)
+#   - Cache poisoning and credential-persistence patterns
+#   - Self-hosted runner risks
+#
+# This is a FAILING gate at Medium severity and above. Known-safe findings are
+# allowlisted, one at a time with a rationale, in zizmor.yml at the repo root --
+# never by lowering the threshold. Informational-severity findings are surfaced
+# in the run log but do not fail the build. A new Medium+ finding that is not in
+# the allowlist fails this check.
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - '.github/workflows/**'
+      - '.github/actions/**'
+      - 'zizmor.yml'
+  pull_request:
+    branches: [main, develop]
+    types: [opened, synchronize, reopened]
+    paths:
+      - '.github/workflows/**'
+      - '.github/actions/**'
+      - 'zizmor.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: workflow-security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  workflow-security:
+    name: Workflow Security
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          # zizmor only reads files; disabling token persistence keeps the
+          # token out of the environment while pip + zizmor run.
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+
+      - name: Install zizmor + PyYAML (pinned)
+        run: pip install zizmor==1.5.2 pyyaml==6.0.2
+
+      - name: Guard pull_request_target against PR-code checkout
+        # Defense-in-depth backstop for the zizmor.yml `dangerous-triggers`
+        # allowlist. zizmor attributes that finding to the pull_request_target
+        # trigger and emits no distinct finding for a PR-head checkout, so
+        # allowlisting the trigger (whole-file or line) would also mask the one
+        # regression that makes these workflows dangerous: checking out PR-supplied
+        # code. This step parses each workflow structurally (PyYAML, so a scalar
+        # `on:` and the YAML `on -> True` key are handled) and fails any
+        # pull_request_target workflow whose actions/checkout step points `ref:` or
+        # `repository:` at the PR head. It is NOT airtight -- laundering the head
+        # ref through a prior step's output evades a static check -- which is why
+        # it is a backstop layered with zizmor and the CODEOWNERS review required
+        # on every workflow change, not the sole control.
+        run: |
+          python3 - <<'PY'
+          import glob, sys
+          import yaml
+
+          def trigger_names(doc):
+              # YAML 1.1 parses a bare `on:` key as the boolean True.
+              on = doc.get("on", doc.get(True))
+              if isinstance(on, str):
+                  return {on}
+              if isinstance(on, list):
+                  return set(on)
+              if isinstance(on, dict):
+                  return set(on.keys())
+              return set()
+
+          def points_at_pr_head(value):
+              return isinstance(value, str) and "github.event.pull_request.head" in value
+
+          bad = []
+          for path in sorted(glob.glob(".github/workflows/*.yml")
+                             + glob.glob(".github/workflows/*.yaml")):
+              with open(path) as fh:
+                  doc = yaml.safe_load(fh)
+              if not isinstance(doc, dict):
+                  continue
+              if "pull_request_target" not in trigger_names(doc):
+                  continue
+              for job in (doc.get("jobs") or {}).values():
+                  if not isinstance(job, dict):
+                      continue
+                  for step in (job.get("steps") or []):
+                      if not isinstance(step, dict):
+                          continue
+                      uses = step.get("uses", "")
+                      if not (isinstance(uses, str) and uses.startswith("actions/checkout")):
+                          continue
+                      with_ = step.get("with") or {}
+                      if points_at_pr_head(with_.get("ref")) or points_at_pr_head(with_.get("repository")):
+                          bad.append(path)
+
+          for path in bad:
+              print(f"::error file={path}::pull_request_target workflow checks out PR head "
+                    "code (fork code-execution risk). Read PR metadata via the API instead.")
+          if bad:
+              sys.exit(1)
+          print("pull_request_target checkout guard passed.")
+          PY
+
+      - name: Run zizmor (Medium+ gate)
+        env:
+          # Read-only token enables zizmor's online audits (e.g.
+          # known-vulnerable-actions) against the advisory DB. contents: read is
+          # sufficient; no write scope is granted.
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Non-zero exit on any Medium+ finding that is not allowlisted in
+          # zizmor.yml -> fails the check. Scans workflows AND composite actions.
+          zizmor \
+            --config zizmor.yml \
+            --min-severity=medium \
+            .github/workflows/ \
+            .github/actions/
