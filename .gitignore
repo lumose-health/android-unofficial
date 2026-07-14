@@ -67,3 +67,7 @@ _bmad-output/
 
 # Claude Code local settings and transcripts
 .claude/
+
+# Local-only AI-assisted development playbook (kept out of the repo, same as
+# the platform monorepo)
+CLAUDE.md
