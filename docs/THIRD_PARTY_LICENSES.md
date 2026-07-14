@@ -99,7 +99,7 @@ GPL-3.0 License
 
 The OpenMinimed-derived code above, like GlycemicGPT as a whole, is licensed
 under the GNU General Public License, version 3. The full license text ships at
-the repository root in [`LICENSE`](../../LICENSE). In short, you may use, study,
+the repository root in [`LICENSE`](../LICENSE). In short, you may use, study,
 share, and modify this software, provided that derivative works are distributed
 under the same license and that copyright and license notices are preserved.
 
