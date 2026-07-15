@@ -7,69 +7,54 @@
 # Order matters -- later rules take precedence over earlier ones.
 # See GOVERNANCE.md for role definitions and the path to becoming a maintainer.
 
-# Default: maintainers team reviews everything
-* @GlycemicGPT/maintainers
+# Default: the project lead owns everything. Mobile is lead-held
+# under the expertise-based ownership model; area teams can be added
+# here when a mobile maintainer is onboarded.
+* @jlengelbrecht
 
-# Governance & project policy: project lead explicitly requested
-# These files define how the project is run. The project lead is
-# listed individually so they always appear in the review request.
-# The maintainers team is co-listed so review is always requested
-# even when the project lead authors the PR (GitHub skips self-review
-# for sole code owners). Note: CODEOWNERS ensures the request, not
-# that a specific person approves -- that is enforced by process
-# (see GOVERNANCE.md).
-/.github/CODEOWNERS @jlengelbrecht @GlycemicGPT/maintainers
-/GOVERNANCE.md @jlengelbrecht @GlycemicGPT/maintainers
-/CONTRIBUTING.md @jlengelbrecht @GlycemicGPT/maintainers
-/LICENSE @jlengelbrecht @GlycemicGPT/maintainers
-/CODE_OF_CONDUCT.md @jlengelbrecht @GlycemicGPT/maintainers
+# Governance & project policy: project lead.
+/.github/CODEOWNERS @jlengelbrecht
+/GOVERNANCE.md @jlengelbrecht
+/CONTRIBUTING.md @jlengelbrecht
+/LICENSE @jlengelbrecht
+/CODE_OF_CONDUCT.md @jlengelbrecht
 
-# Security infrastructure: project lead explicitly requested
-/SECURITY.md @jlengelbrecht @GlycemicGPT/maintainers
-/.github/dco.yml @jlengelbrecht @GlycemicGPT/maintainers
+# Security infrastructure: project lead.
+/SECURITY.md @jlengelbrecht
+/.github/dco.yml @jlengelbrecht
 
-# All GitHub Actions workflows: maintainer review required.
+# All GitHub Actions workflows: project lead review required.
 # Workflow files run with access to repo secrets and (for bypass-actor
 # bots) write access to protected branches. A malicious or careless
 # workflow change can compromise the release pipeline.
-/.github/workflows/ @jlengelbrecht @GlycemicGPT/maintainers
+/.github/workflows/ @jlengelbrecht
 
-# Release & CI configuration: project lead explicitly requested
-/.github/workflows/release.yml @jlengelbrecht @GlycemicGPT/maintainers
-/renovate.json5 @jlengelbrecht @GlycemicGPT/maintainers
+# Release & CI configuration: project lead.
+/.github/workflows/release.yml @jlengelbrecht
+/renovate.json5 @jlengelbrecht
 
 # Promotion & release automation config: these files drive the develop->main
 # promotion pipeline (version bumps, changelog generation, cherry-pick sync-back)
 # and the workflow-security allowlist. A careless edit can mis-version a release,
 # corrupt the changelog, or silently widen what the "Workflow Security" gate
-# ignores -- so every change is routed to maintainer review. (Automated bot PRs
+# ignores -- so every change is routed to lead review. (Automated bot PRs
 # from release-please / the sync workflow reach these via bypass actors; required
 # status checks still gate the merge.)
-/release-please-config.json @jlengelbrecht @GlycemicGPT/maintainers
-/.release-please-manifest.json @jlengelbrecht @GlycemicGPT/maintainers
-/.github/changelog-pr-config.json @jlengelbrecht @GlycemicGPT/maintainers
-/.github/autolabeler-config.json @jlengelbrecht @GlycemicGPT/maintainers
-/zizmor.yml @jlengelbrecht @GlycemicGPT/maintainers
+/release-please-config.json @jlengelbrecht
+/.release-please-manifest.json @jlengelbrecht
+/.github/changelog-pr-config.json @jlengelbrecht
+/.github/autolabeler-config.json @jlengelbrecht
+/zizmor.yml @jlengelbrecht
 
 # Version catalog: Renovate PRs that bump Gradle catalog dependencies touch the
-# catalog, so route it to maintainer review. Tier-B auto-merge PRs bypass this
+# catalog, so route it to lead review. Tier-B auto-merge PRs bypass this
 # CODEOWNERS request by pre-approved policy (the glycemicgpt-merge bypass actor
 # skips the approval requirement; required status checks still gate the merge).
 # Manual-tier Renovate PRs and human edits stop here for review.
-/gradle/libs.versions.toml @jlengelbrecht @GlycemicGPT/maintainers
+/gradle/libs.versions.toml @jlengelbrecht
 
 # Device data driver plugins: safety-critical BLE parsing and
-# SafetyLimits enforcement. Maintainer review required on every change.
-/plugins/pump-driver-api/ @GlycemicGPT/maintainers
-/plugins/shipped/tandem/ @GlycemicGPT/maintainers
-/plugins/shipped/medtronic/ @GlycemicGPT/maintainers
-
-# Component ownership -- ready for once contributors are promoted to
-# the @GlycemicGPT/committers team (see GOVERNANCE.md, "Becoming a
-# Committer", for the onboarding steps). Uncomment and update below
-# once that team has members with relevant component expertise.
-#
-# /app/ @GlycemicGPT/maintainers @GlycemicGPT/committers
-# /wear-device/ @GlycemicGPT/maintainers @GlycemicGPT/committers
-# /watchface/ @GlycemicGPT/maintainers @GlycemicGPT/committers
-# /plugins/ @GlycemicGPT/maintainers @GlycemicGPT/committers
+# SafetyLimits enforcement. Lead review required on every change.
+/plugins/pump-driver-api/ @jlengelbrecht
+/plugins/shipped/tandem/ @jlengelbrecht
+/plugins/shipped/medtronic/ @jlengelbrecht
