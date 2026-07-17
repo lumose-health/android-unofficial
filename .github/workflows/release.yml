@@ -23,6 +23,9 @@ jobs:
   release-please:
     name: Release Please
     runs-on: ubuntu-latest
+    # The RELEASE app key exists only as a secret in this approval-gated
+    # environment (no plain org/repo copy).
+    environment: release-gated
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
@@ -122,6 +125,7 @@ jobs:
   fallback-release:
     name: Fallback Patch Release
     runs-on: ubuntu-latest
+    environment: release-gated
     needs: [release-please, detect-deployable-changes]
     if: >-
       needs.release-please.outputs.release_created != 'true' &&
@@ -305,6 +309,7 @@ jobs:
   release-android-apk:
     name: Build & Upload Release APK
     runs-on: ubuntu-latest
+    environment: release-gated
     needs: [release-please, fallback-release]
     if: >-
       always() && !cancelled() &&

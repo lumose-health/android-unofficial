@@ -19,6 +19,9 @@ jobs:
   changelog:
     name: Update CHANGELOG.md
     runs-on: ubuntu-latest
+    # The RELEASE app key exists only as a secret in this approval-gated
+    # environment (no plain org/repo copy).
+    environment: release-gated
     permissions: {}
     outputs:
       pr_number: ${{ steps.create-pr.outputs.pr_number }}
