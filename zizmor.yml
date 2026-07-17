@@ -60,6 +60,6 @@ rules:
   # ---------------------------------------------------------------------------
   artipacked:
     ignore:
-      - changelog-pr.yml:46
+      - changelog-pr.yml:49
       - sync-main-to-develop.yml:37
-      - release.yml:144
+      - release.yml:148
