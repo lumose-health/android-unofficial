@@ -324,6 +324,11 @@ jobs:
     name: Approve and Merge Changelog
     runs-on: ubuntu-latest
     permissions: {}
+    # MERGE is a gated env secret now. This job mints MERGE to merge the
+    # changelog PR, so it declares the environment and pauses for
+    # approval. Pause-tolerant: runs on push:main after a promotion
+    # (human present).
+    environment: release-gated
     needs: changelog
     if: needs.changelog.outputs.has_changes == 'true' && needs.changelog.outputs.pr_number != ''
 
