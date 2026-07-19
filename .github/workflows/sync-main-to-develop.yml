@@ -21,6 +21,12 @@ jobs:
   sync:
     name: Sync to Develop
     runs-on: ubuntu-latest
+    # MERGE is a gated env secret now, so this job must declare the
+    # environment to mint it -- sync pauses for a required-reviewer
+    # approval on every run. It fires only on chore:release / changelog
+    # commits to main, i.e. during a promotion, when a human is present
+    # to approve.
+    environment: release-gated
     # Only run for release-please version bumps or changelog updates.
     # Feature commits from promotion merges do NOT match (no loop).
     if: >-
