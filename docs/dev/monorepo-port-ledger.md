@@ -1,10 +1,11 @@
 # Monorepo port ledger
 
-While the Android/Wear OS split from the [GlycemicGPT monorepo](https://github.com/lumose-health/GlycemicGPT)
-is in progress, the monorepo remains the source of truth users are served from, and external
-mobile-tree PRs land there first (see the monorepo's CONTRIBUTING, "Mobile Code During the
-Repository Split"). Maintainers then port each merged mobile-tree change to this repository via
-`git cherry-pick -x`, preserving the contributor's commit authorship.
+Mobile development happens in this repository — mobile PRs should be opened against this repo's
+`develop` (see the [GlycemicGPT monorepo](https://github.com/lumose-health/GlycemicGPT)'s
+CONTRIBUTING, "Mobile Code During the Repository Split"). The monorepo's mobile tree remains
+temporarily while the split completes; if an in-flight mobile-tree change still lands there during
+the wind-down, maintainers port it to this repository via `git cherry-pick -x`, preserving the
+contributor's commit authorship.
 
 This ledger records every monorepo commit touching the extracted paths
 (`apps/mobile/`, `plugins/`, `tools/medtronic-ble-spike/`, `scripts/mobile-dev.sh`) since the
