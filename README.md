@@ -86,7 +86,7 @@ We welcome contributions, especially new device data drivers -- please read [CON
 
 - Bug reports and feature requests: [Issues](../../issues)
 - Questions and discussion: the main platform repo's [Discussions](https://github.com/GlycemicGPT/GlycemicGPT/discussions) and [Discord](https://discord.gg/QbyhCQKDBs) -- this repo doesn't run a separate community channel
-- Roles and decision-making: [GOVERNANCE.md](GOVERNANCE.md)
+- Roles and decision-making: [GOVERNANCE.md](https://github.com/lumose-health/.github/blob/main/GOVERNANCE.md)
 
 ## License
 

@@ -114,7 +114,7 @@ Every PR to `develop` runs a set of automation-hygiene checks alongside the buil
 
 - **Attribution Check** -- scans commit trailers, changed-file comments, and the PR
   description for AI-tool attribution and prohibited bot co-authors (see
-  [CONTRIBUTING.md](../../CONTRIBUTING.md#no-ai-attribution-in-code)). The develop->main
+  [CONTRIBUTING.md](../../CONTRIBUTING.md#ai-assisted-development--attribution-policy)). The develop->main
   promotion PR is exempt from its CRITICAL auto-close.
 
 `Attribution Check` and `Auto Label PRs` run on `pull_request_target` so they also work on
