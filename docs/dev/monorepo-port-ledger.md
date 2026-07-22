@@ -32,7 +32,7 @@ record the monorepo commit once known and both PR links instead).
 |---|---|---|---|---|---|
 | 1 | [`df255978`](https://github.com/lumose-health/GlycemicGPT/commit/df2559788dda952c8376ef12f823955a33803561) | [#906](https://github.com/lumose-health/GlycemicGPT/pull/906) | Fix history timestamps: anchor pump reference time in the device's local zone | @mortenfyhn | ported (this PR) |
 | 2 | [`b056cb45`](https://github.com/lumose-health/GlycemicGPT/commit/b056cb4520d9985d908a5606ca8e9e99b6d3b9a7) | [#907](https://github.com/lumose-health/GlycemicGPT/pull/907) | Confirm IOB parsing on a live 780G; drop provisional markers | @mortenfyhn | ported (this PR) |
-| 3 | pending #921 merge -- squash SHA not yet known, see note below | [GlycemicGPT#921](https://github.com/lumose-health/GlycemicGPT/pull/921) | GLY-170: anchor the phone updater's APK selector to an exact filename shape + version pin, so it can't install the Wear/WatchFace APK over the phone app | @jlengelbrecht96 | parallel-landed -- [android-unofficial#23](https://github.com/lumose-health/android-unofficial/pull/23) |
+| 3 | [`aac94ee2`](https://github.com/lumose-health/GlycemicGPT/commit/aac94ee26543f5f65a1cd1665d5879618de868a6) | [GlycemicGPT#921](https://github.com/lumose-health/GlycemicGPT/pull/921) | GLY-170: anchor the phone updater's APK selector to an exact filename shape + version pin, so it can't install the Wear/WatchFace APK over the phone app | @jlengelbrecht96 | parallel-landed -- [android-unofficial#23](https://github.com/lumose-health/android-unofficial/pull/23) |
 
 New rows are appended when a mobile-tree PR merges in the monorepo; the row's port status moves
 from `pending` to `ported` when the cherry-pick reaches this repository's `develop`. A row whose
@@ -41,11 +41,8 @@ recorded as `parallel-landed` instead, and is terminal from the start.
 
 **Note on row 3:** this repository's `AppUpdateChecker.kt` already carried an independent, working
 fix for the underlying defect class (a prior PR's prefix-exclusion selector), so there was no live
-bug here to port. GlycemicGPT#921 (once merged) will produce a monorepo commit touching
-`apps/mobile/`, same as any other row in this ledger -- but it is intentionally NOT cherry-picked
-here, because android-unofficial#23 already lands an independently authored, equivalent fix (the
-same anchored-regex approach), not a port of #921's commit. Update this row's Monorepo commit
-column with #921's squash SHA once it merges, for traceability, even though that commit will never
-be cherry-picked into this repo. Recorded here anyway so the parity check for the eventual
-monorepo-removal step has a paper trail for this file, even though it doesn't fit the table's
-normal cherry-pick columns.
+bug here to port. GlycemicGPT#921's squash commit touches `apps/mobile/`, same as any other row in
+this ledger, but it is intentionally NOT cherry-picked here, because android-unofficial#23 already
+landed an independently authored, equivalent fix (the same anchored-regex approach), not a port of
+that commit. Recorded here anyway so the parity check for the eventual monorepo-removal step has
+a paper trail for this file, even though it doesn't fit the table's normal cherry-pick columns.
