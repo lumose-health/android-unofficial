@@ -134,6 +134,48 @@ class AppUpdateCheckerTest {
         assertNull(AppUpdateChecker.selectPhoneApkAsset(devAssets, channel = "stable"))
     }
 
+    // expectedVersion pinning tests -- a release's assets should never be trusted purely by
+    // filename shape when a stronger source of truth (the release's own tag) is available; a
+    // stale asset left over from a different release must not be installed under the wrong
+    // reported version.
+
+    @Test
+    fun `selectPhoneApkAsset accepts a phone APK whose version matches expectedVersion`() {
+        val assets = listOf(asset("GlycemicGPT-0.13.0-release.apk"))
+        val selected =
+            AppUpdateChecker.selectPhoneApkAsset(assets, channel = "stable", expectedVersion = "0.13.0")
+        assertEquals("GlycemicGPT-0.13.0-release.apk", selected?.name)
+    }
+
+    @Test
+    fun `selectPhoneApkAsset rejects a stale asset whose version does not match expectedVersion`() {
+        // A v0.13.0 release carrying a leftover GlycemicGPT-0.12.9-release.apk asset must not be
+        // installed and reported to the user as version 0.13.0.
+        val assets = listOf(asset("GlycemicGPT-0.12.9-release.apk"))
+        val selected =
+            AppUpdateChecker.selectPhoneApkAsset(assets, channel = "stable", expectedVersion = "0.13.0")
+        assertNull(selected)
+    }
+
+    @Test
+    fun `selectPhoneApkAsset ignores expectedVersion when null`() {
+        val assets = listOf(asset("GlycemicGPT-0.13.0-release.apk"))
+        val selected =
+            AppUpdateChecker.selectPhoneApkAsset(assets, channel = "stable", expectedVersion = null)
+        assertEquals("GlycemicGPT-0.13.0-release.apk", selected?.name)
+    }
+
+    @Test
+    fun `selectPhoneApkAsset fails closed when two phone-shaped assets are both present`() {
+        // Should never happen for a well-formed release, but the selector must not silently
+        // pick one via firstOrNull order if it does.
+        val assets = listOf(
+            asset("GlycemicGPT-0.13.0-release.apk"),
+            asset("GlycemicGPT-0.13.1-release.apk"),
+        )
+        assertNull(AppUpdateChecker.selectPhoneApkAsset(assets, channel = "stable"))
+    }
+
     @Test
     fun `parseVersionCode for simple version`() {
         assertEquals(1_000_000, AppUpdateChecker.parseVersionCode("1.0.0"))
