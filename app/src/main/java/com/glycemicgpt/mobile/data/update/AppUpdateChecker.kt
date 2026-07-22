@@ -71,7 +71,6 @@ class AppUpdateChecker @Inject constructor(
             try {
                 val channel = BuildConfig.UPDATE_CHANNEL
                 val releasesUrl = if (channel == "dev") DEV_RELEASES_URL else STABLE_RELEASES_URL
-                val apkSuffix = if (channel == "dev") "-debug.apk" else "-release.apk"
 
                 val request = Request.Builder()
                     .url(releasesUrl)
@@ -97,8 +96,11 @@ class AppUpdateChecker @Inject constructor(
                     val release = adapter.fromJson(body)
                         ?: return@withContext UpdateCheckResult.Error("Failed to parse release")
 
-                    val apkAsset = selectPhoneAsset(release.assets, apkSuffix)
-                        ?: return@withContext UpdateCheckResult.Error("No APK found in release")
+                    val apkAsset = if (channel == "dev") {
+                        selectPhoneApkAsset(release.assets, channel)
+                    } else {
+                        selectPhoneApkAsset(release.assets, channel, release.tagName.removePrefix("v"))
+                    } ?: return@withContext UpdateCheckResult.Error("No APK found in release")
 
                     if (channel == "dev") {
                         val remoteRunNumber = parseDevRunNumber(apkAsset.name)
@@ -216,15 +218,6 @@ class AppUpdateChecker @Inject constructor(
             "https://api.github.com/repos/GlycemicGPT/glycemicgpt-android-unofficial/releases/latest"
         internal const val DEV_RELEASES_URL =
             "https://api.github.com/repos/GlycemicGPT/glycemicgpt-android-unofficial/releases/tags/dev-latest"
-        private const val APK_PREFIX = "GlycemicGPT-"
-        // Sibling assets in the same release that the phone selector MUST exclude. A
-        // stable/dev release also carries the Wear and both WatchFace APKs, and every one
-        // of them shares APK_PREFIX and the channel suffix ("-release.apk" / "-debug.apk").
-        // The Wear and WatchFace APKs even carry the phone's applicationId and signing key,
-        // so if the phone selector picked one, Android would install it in place OVER the
-        // phone app. See selectPhoneAsset.
-        private const val WEAR_APK_PREFIX = "GlycemicGPT-Wear-"
-        private const val WATCHFACE_APK_PREFIX = "GlycemicGPT-WatchFace-"
         private const val APK_SUBDIR = "apk_updates"
 
         private val ALLOWED_DOWNLOAD_HOSTS = setOf(
@@ -234,25 +227,43 @@ class AppUpdateChecker @Inject constructor(
 
         private val DEV_RUN_NUMBER_REGEX = Regex("""-dev\.(\d+)-""")
 
-        /**
-         * Select the phone APK for [apkSuffix] ("-release.apk" for the stable channel,
-         * "-debug.apk" for dev) from a release's assets, or null if none is present.
-         *
-         * The Wear and WatchFace APKs in the same release share [APK_PREFIX] and the same
-         * suffix, so they are excluded explicitly: firstOrNull over the (unordered) GitHub
-         * asset list would otherwise let a Wear/WatchFace APK win, and because those carry
-         * the phone's applicationId and signing key, Android would install one in place over
-         * the phone app.
-         */
-        fun selectPhoneAsset(assets: List<GitHubAsset>, apkSuffix: String): GitHubAsset? =
-            assets.firstOrNull { isPhoneApkAsset(it.name, apkSuffix) }
+        // Anchored to the phone APK's exact release-asset shape so it can never match a Wear or
+        // WatchFace asset. Mirrors the "Rename APKs with version" step in
+        // .github/workflows/release.yml (`GlycemicGPT-${VERSION}-release.apk`, VERSION always
+        // MAJOR.MINOR.PATCH) and the dev-APK rename step in .github/workflows/dev-pre-release.yml
+        // (`GlycemicGPT-${VERSION}-dev.${RUN}-debug.apk`, RUN = github.run_number) -- update this
+        // regex in lockstep with those steps. A stable/dev release also carries the Wear and both
+        // WatchFace APKs, which share the phone's applicationId and signing key -- if the selector
+        // picked one, Android would install it in place OVER the phone app. A positive anchored
+        // match is preferred over the prior prefix-exclusion approach, which needed a new
+        // exclusion added for every future asset type; the trade-off is that a future filename
+        // format change here makes the selector match no APK ("No APK found in release") rather
+        // than silently accepting a near-miss.
+        private val STABLE_PHONE_APK_REGEX = Regex("""^GlycemicGPT-(\d+\.\d+\.\d+)-release\.apk$""")
+        private val DEV_PHONE_APK_REGEX = Regex("""^GlycemicGPT-(\d+\.\d+\.\d+)-dev\.\d+-debug\.apk$""")
 
-        /** True only for the PHONE APK name of [apkSuffix]; rejects Wear and WatchFace assets. */
-        fun isPhoneApkAsset(name: String, apkSuffix: String): Boolean =
-            name.startsWith(APK_PREFIX) &&
-                name.endsWith(apkSuffix) &&
-                !name.startsWith(WEAR_APK_PREFIX) &&
-                !name.startsWith(WATCHFACE_APK_PREFIX)
+        /**
+         * Picks the phone APK out of a release's assets by matching its exact filename shape.
+         *
+         * When [expectedVersion] is given (the stable channel, from `release.tagName`), a shape
+         * match whose embedded version doesn't equal it is rejected -- otherwise a stale asset
+         * left over from a different release (e.g. `GlycemicGPT-1.2.2-release.apk` attached to a
+         * v1.2.3 release) would be installed under the version reported to the user. Fails closed
+         * on ambiguity too: if more than one asset matches, null is returned rather than picking
+         * one via [List.firstOrNull] order.
+         */
+        fun selectPhoneApkAsset(
+            assets: List<GitHubAsset>,
+            channel: String,
+            expectedVersion: String? = null,
+        ): GitHubAsset? {
+            val regex = if (channel == "dev") DEV_PHONE_APK_REGEX else STABLE_PHONE_APK_REGEX
+            val matches = assets.filter { asset ->
+                val match = regex.find(asset.name) ?: return@filter false
+                expectedVersion == null || match.groupValues[1] == expectedVersion
+            }
+            return matches.singleOrNull()
+        }
 
         fun isAllowedDownloadHost(url: String): Boolean {
             val host = try {
