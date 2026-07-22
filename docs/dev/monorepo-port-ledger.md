@@ -26,6 +26,16 @@ be `ported`.
 |---|---|---|---|---|---|
 | 1 | [`df255978`](https://github.com/lumose-health/GlycemicGPT/commit/df2559788dda952c8376ef12f823955a33803561) | [#906](https://github.com/lumose-health/GlycemicGPT/pull/906) | Fix history timestamps: anchor pump reference time in the device's local zone | @mortenfyhn | ported (this PR) |
 | 2 | [`b056cb45`](https://github.com/lumose-health/GlycemicGPT/commit/b056cb4520d9985d908a5606ca8e9e99b6d3b9a7) | [#907](https://github.com/lumose-health/GlycemicGPT/pull/907) | Confirm IOB parsing on a live 780G; drop provisional markers | @mortenfyhn | ported (this PR) |
+| 3 | n/a -- not a cherry-pick, see note below | [GlycemicGPT#921](https://github.com/lumose-health/GlycemicGPT/pull/921) | GLY-170: anchor the phone updater's APK selector to an exact filename shape + version pin, so it can't install the Wear/WatchFace APK over the phone app | @jlengelbrecht96 | n/a -- parallel landing, [android-unofficial#23](https://github.com/lumose-health/android-unofficial/pull/23) |
 
 New rows are appended when a mobile-tree PR merges in the monorepo; the row's port status moves
 from `pending` to `ported` when the cherry-pick reaches this repository's `develop`.
+
+**Note on row 3:** this repository's `AppUpdateChecker.kt` already carried an independent, working
+fix for the underlying defect class (a prior PR's prefix-exclusion selector), so there was no live
+bug here to port. android-unofficial#23 is a parallel, independently authored commit that aligns
+this repo's selector to the same anchored-regex approach as the monorepo fix, rather than a
+`git cherry-pick -x` of GlycemicGPT#921's squash commit -- there is nothing to cherry-pick, since
+the two PRs don't share a commit. Recorded here anyway so the parity check for the eventual
+monorepo-removal step has a paper trail for this file, even though it doesn't fit the table's
+normal cherry-pick columns.
