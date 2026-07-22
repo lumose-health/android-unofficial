@@ -112,12 +112,14 @@ warrant the artifact-level coverage.
 ## SAST (Static Analysis)
 
 **Tool:** [Semgrep](https://semgrep.dev/) with the `p/kotlin`, `p/java`, and `p/secrets`
-rulesets, over `app/`, `wear-device/`, `watchface/`, and `plugins/`.
+rulesets, over `app/`, `wear-device/`, `watchface/`, `plugins/`, and `tools/`.
 
-Non-shipped research spikes under `tools/` (e.g. `tools/medtronic-ble-spike/`) fall outside this
-scan scope and outside the `plugins/shipped/**/ble/**` review path rules; they are reviewed as
-ordinary Kotlin, not as shipped BLE drivers. CodeRabbit's semantic BLE Protocol Safety check is
-expected to apply to any BLE code a PR touches, including such spikes.
+Non-shipped research spikes under `tools/` (e.g. `tools/medtronic-ble-spike/`) are **within** this
+Semgrep scan scope -- `security-scan.yml` deliberately includes `tools/` so SAST coverage matches
+the dependency scan. They fall outside only the `plugins/shipped/**/ble/**` review path rules (the
+shipped-driver BLE-protocol review instructions), which is appropriate for non-shipped spike code;
+they are otherwise reviewed as ordinary Kotlin, not as shipped BLE drivers. CodeRabbit's semantic
+BLE Protocol Safety check is expected to apply to any BLE code a PR touches, including such spikes.
 
 **Gate policy:** fail on **HIGH/ERROR-severity** findings only (mirroring the monorepo's
 `evaluate-sast.py`). WARNING/INFO findings are printed but do not block. A crashed scanner fails
