@@ -44,5 +44,5 @@ fix for the underlying defect class (a prior PR's prefix-exclusion selector), so
 bug here to port. GlycemicGPT#921's squash commit touches `apps/mobile/`, same as any other row in
 this ledger, but it is intentionally NOT cherry-picked here, because android-unofficial#23 already
 landed an independently authored, equivalent fix (the same anchored-regex approach), not a port of
-#921's commit. Recorded here anyway so the parity check for the eventual monorepo-removal step has
+that commit. Recorded here anyway so the parity check for the eventual monorepo-removal step has
 a paper trail for this file, even though it doesn't fit the table's normal cherry-pick columns.
