@@ -120,9 +120,14 @@ PARTICULAR PURPOSE. See the GNU General Public License for more details.
 
 - Repository: https://github.com/particle-iot/ecjpake-java
 - License: Apache-2.0
-- Copyright: Particle Industries, Inc.
+- Copyright: 2022 Particle Industries, Inc.
 
 ---
+
+The terms and conditions below are the full text of the Apache License,
+Version 2.0. The upstream repository's boilerplate "APPENDIX: How to apply
+the Apache License to your work" section is instructional and not part of
+the license terms, so it is omitted here.
 
 Apache License
 Version 2.0, January 2004
