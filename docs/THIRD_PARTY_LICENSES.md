@@ -316,6 +316,7 @@ END OF TERMS AND CONDITIONS
 
 ### SQLCipher (ZETETIC LLC)
 
+- Dependency: `net.zetetic:sqlcipher-android:4.13.0`
 - Repository: https://github.com/sqlcipher/sqlcipher-android
 - License: BSD-3-Clause
 - Copyright: ZETETIC LLC
