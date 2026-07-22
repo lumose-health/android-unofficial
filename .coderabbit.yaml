@@ -112,6 +112,8 @@ reviews:
           must be incremented in PluginMetadata.kt.
         - Safety contract KDoc: all capability methods that accept SafetyLimits
           must document the filtering/rejection behavior in KDoc.
+        - PluginCapabilityInterface marker: all new capability interfaces must
+          extend this marker so plugins can return them from getCapability().
         - Read-only posture: no therapeutic write primitive (bolus, basal change,
           pump-setting modification) may be added to any capability interface.
     - path: "plugins/shipped/{tandem,medtronic}/**/*.kt"

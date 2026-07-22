@@ -24,7 +24,14 @@ merging.
 | **Security Scan Gate** | `security-scan.yml` | Semgrep SAST over Kotlin/Java sources; fails on HIGH/ERROR findings. |
 | **Dependency Scan Gate** | `dependency-scan.yml` | OSV-Scanner over the committed Gradle lockfiles; fails on any known CVE. |
 | **Workflow Lint** | `workflow-lint.yml` | actionlint + shellcheck over workflows; SHA-pin and composite-action guards. |
+| **Workflow Security** | `workflow-security.yml` | zizmor (Medium+) over workflows and composite actions; `pull_request_target`-checkout guard. |
 | Android Gate | `android.yml` | Build/unit-test/lint (not a security gate, listed for context). |
+
+All four security gates plus the Android Gate are **required** status checks on `develop`
+(the "Protect develop" ruleset). Each runs on every PR (`Security Scan Gate`, `Workflow Lint`,
+`Workflow Security`) or reports through an always-running aggregation gate that fails closed on a
+build/scan failure and passes only when there are no relevant changes (`Android Gate`,
+`Dependency Scan Gate`). None of these five gates use `continue-on-error`.
 
 Two more layers run outside these workflows and are intentionally **not** duplicated here:
 
@@ -35,13 +42,20 @@ Two more layers run outside these workflows and are intentionally **not** duplic
 
 ### What was intentionally dropped vs the monorepo
 
-The platform monorepo's `security-scan.yml` is multi-language and multi-stage. Only the mobile
-SAST lane applies to this repository; the rest target services that do not exist here and would
-be perpetually red, so they were **not** ported:
+The platform monorepo's security CI (`security-scan.yml`, the full DAST/pentest suite in
+`security-full-suite.yml`, and `dependency-scan.yml`) is multi-language and multi-stage. Of those,
+only Android SAST (Semgrep), dependency CVE scanning (OSV over Gradle lockfiles), and secret
+scanning apply to this repository (workflow hardening -- the `Workflow Lint` and `Workflow
+Security` gates in the table above -- is a separate concern, not part of these three). The rest
+target a running server/API/web app that does not exist here and would be perpetually red, so they
+were **not** ported:
 
 - **Semgrep Python / TypeScript** -- no backend or web code in this repo.
-- **DAST / ZAP / nuclei / the Docker test stack** -- there is no HTTP service to scan. BLE
-  protocol fuzzing would require pump hardware and is out of scope for CI.
+- **DAST / ZAP / nuclei / the Docker test stack** (`security-full-suite.yml`) -- there is no HTTP
+  service to scan. BLE protocol fuzzing would require pump hardware and is out of scope for CI.
+- **Auth pentests** (`test-auth-flows.py`) and **API fuzzing** (`fuzz-api.py`, self-adapting via
+  `/openapi.json`) -- **N/A**: this repo ships no authenticated server or HTTP API surface to
+  exercise, so there is nothing for these gates to test.
 - **`evaluate-sast.py` + `create-finding-issues.py`** -- the monorepo's issue-filing pipeline
   depends on the org SECURITY GitHub App and a `scripts/security/` Python toolchain that this
   mobile-only repo does not carry. The Security Scan Gate uses a plain
@@ -57,10 +71,53 @@ third pass over the same tree would add maintenance and noise without new covera
 `p/secrets` lane stays because it is free within the SAST run and gives an in-repo, PR-blocking
 signal independent of the external services.
 
+### Android APK SAST (MobSF) decision -- declined for now
+
+An Android-specific SAST such as [MobSF](https://github.com/MobSF/Mobile-Security-Framework-MobSF)
+(or an APK/AAB scan) was evaluated and **deliberately declined** at this time.
+
+It is **not** simply redundant with Semgrep. MobSF operates on the built artifact and covers a
+class that source-level Kotlin/Java SAST does not:
+
+- `AndroidManifest.xml` posture -- exported components, over-broad permissions, `debuggable`,
+  `allowBackup`, `usesCleartextTraffic`, weak `network_security_config`.
+- Packaging / build configuration -- signing scheme, `minSdk` exposure, insecure library
+  bundling.
+- Secrets embedded in the **packaged** APK (resources, `strings.xml`, assets, native libraries),
+  which never appear in the source tree Semgrep's `p/secrets` lane scans.
+
+It is declined because the cost outweighs the benefit for this repository's current shape:
+
+- This is a **monitoring-only, read-only** app (no therapeutic/write surface) distributed by
+  **GitHub side-load**, not through the Play Store, so it faces neither Play's pre-launch security
+  report nor a store-review threat model.
+- On an app that legitimately requires BLE, location (for BLE scanning), and foreground-service
+  permissions, MobSF's manifest/permission heuristics are **high-false-positive** and would
+  generate recurring triage noise.
+- Running it in CI means building and scanning an APK on every PR (a heavier, slower pipeline)
+  plus maintaining a suppression baseline -- maintenance the current threat model does not
+  justify.
+
+The manifest/network-security posture is meanwhile covered defensively by Android Lint (in the
+Android Gate) and CodeRabbit review. Source-level secret exposure is caught by Semgrep
+`p/secrets`, CodeRabbit `gitleaks`, and org-wide GitGuardian, and no signing material is
+committed. Secrets embedded only in the built artifact (not in source) are not scanned today --
+an accepted residual gap that the revisit trigger below is meant to catch.
+
+**Revisit trigger:** add an APK/manifest SAST gate if this app is ever distributed via the
+**Play Store**, or if **any write/therapeutic surface** (bolus, basal, pump-setting, or other
+device-command capability) is introduced -- either change raises the threat model enough to
+warrant the artifact-level coverage.
+
 ## SAST (Static Analysis)
 
 **Tool:** [Semgrep](https://semgrep.dev/) with the `p/kotlin`, `p/java`, and `p/secrets`
 rulesets, over `app/`, `wear-device/`, `watchface/`, and `plugins/`.
+
+Non-shipped research spikes under `tools/` (e.g. `tools/medtronic-ble-spike/`) fall outside this
+scan scope and outside the `plugins/shipped/**/ble/**` review path rules; they are reviewed as
+ordinary Kotlin, not as shipped BLE drivers. CodeRabbit's semantic BLE Protocol Safety check is
+expected to apply to any BLE code a PR touches, including such spikes.
 
 **Gate policy:** fail on **HIGH/ERROR-severity** findings only (mirroring the monorepo's
 `evaluate-sast.py`). WARNING/INFO findings are printed but do not block. A crashed scanner fails
