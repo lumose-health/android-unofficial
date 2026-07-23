@@ -3,6 +3,7 @@ package com.glycemicgpt.mobile.presentation.navigation
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DetailRoutesTest {
@@ -15,6 +16,7 @@ class DetailRoutesTest {
         Screen.TirDetail.route,
         Screen.InsulinDetail.route,
         Screen.AlertHistory.route,
+        Screen.Licenses.route,
     )
 
     // -- Route strings -----------------------------------------------------------
@@ -37,6 +39,11 @@ class DetailRoutesTest {
     @Test
     fun `AlertHistory has correct route`() {
         assertEquals("alert_history", Screen.AlertHistory.route)
+    }
+
+    @Test
+    fun `Licenses has correct route`() {
+        assertEquals("licenses", Screen.Licenses.route)
     }
 
     // -- Bottom nav capability gating (GLY-146) -----------------------------------
@@ -111,5 +118,16 @@ class DetailRoutesTest {
         assertEquals("Time in Range", Screen.TirDetail.label)
         assertEquals("Insulin", Screen.InsulinDetail.label)
         assertEquals("Alert History", Screen.AlertHistory.label)
+        assertEquals("Open Source Licenses", Screen.Licenses.label)
+    }
+
+    // -- Spoke registration ------------------------------------------------------
+
+    @Test
+    fun `Licenses is registered as a spoke so the bottom bar hides behind it`() {
+        assertTrue(
+            "Licenses must be a spoke route; otherwise the bottom bar covers the license text",
+            spokeRoutes.contains(Screen.Licenses.route),
+        )
     }
 }

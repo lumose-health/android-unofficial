@@ -194,12 +194,42 @@ android {
             it.inputs.dir("../watchface/src/analogMechanical/templates")
             it.inputs.file("../watchface/committed-assets.sha256")
             it.inputs.file("../wear-device/build.gradle.kts")
+
+            // The in-app license viewer's drift gate (LicenseAssetsTest) compares
+            // the packaged assets against these repo files. Register them so an
+            // edit to a license document re-runs the gate instead of reusing a
+            // cached green result.
+            it.inputs.file("../README.md")
+            it.inputs.file("../LICENSE")
+            it.inputs.file("../docs/THIRD_PARTY_LICENSES.md")
         }
     }
 
     // Expose the exported Room schemas to instrumented tests so MigrationTestHelper
     // can build historical schema versions for migration tests.
     sourceSets.getByName("androidTest").assets.srcDirs(files("$projectDir/schemas"))
+}
+
+// The in-app license viewer reads its text out of the APK's assets rather than from a
+// hand-maintained copy in source, so the screen and the repository's license documents
+// cannot drift apart: the assets are regenerated from the documents on every build.
+val generateLicenseAssets = tasks.register<GenerateLicenseAssets>("generateLicenseAssets") {
+    group = "build"
+    description = "Copies the repository's license documents into the APK assets."
+    readme.set(rootProject.layout.projectDirectory.file("README.md"))
+    fullLicense.set(rootProject.layout.projectDirectory.file("LICENSE"))
+    thirdPartyLicenses.set(rootProject.layout.projectDirectory.file("docs/THIRD_PARTY_LICENSES.md"))
+}
+
+androidComponents {
+    onVariants { variant ->
+        // Not a safe call: a variant that silently lost its asset sources would ship an APK
+        // with no license text at all, and only the debug variant is covered by a test.
+        val assets = checkNotNull(variant.sources.assets) {
+            "No asset source for variant ${variant.name}; the license viewer needs one."
+        }
+        assets.addGeneratedSourceDirectory(generateLicenseAssets, GenerateLicenseAssets::outputDir)
+    }
 }
 
 ksp {
@@ -301,4 +331,91 @@ dependencies {
     androidTestImplementation(platform(libs.compose.bom))
     androidTestImplementation(libs.compose.ui.test)
     androidTestImplementation(libs.room.testing)
+}
+
+/**
+ * Bundles the repository's license documents into the APK for the in-app license viewer.
+ *
+ * The copy happens on every build, so the documents stay the single source of truth and the
+ * shipped screen cannot silently fall behind an edit to them. Two assets are whole files; the
+ * third is the README's `## License` section excerpted unaltered. Nothing here rewrites content
+ * for display -- that normalisation belongs to the UI layer (`stripUnresolvableLinks`), which
+ * keeps every asset an exact substring of its source and lets `LicenseAssetsTest` gate them
+ * with a plain equality check.
+ */
+@CacheableTask
+abstract class GenerateLicenseAssets : DefaultTask() {
+
+    /** Source of the project's own copyright and licensing notice (its `## License` section). */
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.NONE)
+    abstract val readme: RegularFileProperty
+
+    /** Full GPL-3.0 text, as shipped at the repository root. */
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.NONE)
+    abstract val fullLicense: RegularFileProperty
+
+    /** Attributions for the upstream work this app ports, depends on, or was informed by. */
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.NONE)
+    abstract val thirdPartyLicenses: RegularFileProperty
+
+    @get:OutputDirectory
+    abstract val outputDir: DirectoryProperty
+
+    @TaskAction
+    fun generate() {
+        val assetDir = outputDir.get().asFile.resolve(ASSET_DIR)
+        assetDir.mkdirs()
+        assetDir.resolve("project_license_notice.md")
+            .writeText(licenseSectionOf(readme.get().asFile.readText()))
+        assetDir.resolve("third_party_licenses.md")
+            .writeText(contentOf(thirdPartyLicenses))
+        assetDir.resolve("gpl-3.0.txt")
+            .writeText(contentOf(fullLicense))
+    }
+
+    /**
+     * Reads a document that ships whole. An empty one would be copied to an empty asset and
+     * render as a blank section, so it fails the build here rather than in a test: this runs
+     * for every variant, whereas `LicenseAssetsTest` only gates the ones that run unit tests.
+     */
+    private fun contentOf(document: RegularFileProperty): String {
+        val file = document.get().asFile
+        return file.readText().also {
+            if (it.isBlank()) {
+                throw GradleException(
+                    "${file.name} is empty. Refusing to ship an APK whose licence screen " +
+                        "would show a blank section in its place.",
+                )
+            }
+        }
+    }
+
+    /**
+     * Returns the README's `## License` section -- heading included, verbatim -- up to the
+     * next second-level heading. A missing heading fails the build rather than shipping an
+     * app whose only in-product licensing notice is empty.
+     */
+    private fun licenseSectionOf(readme: String): String {
+        val lines = readme.lines()
+        val heading = lines.indexOfFirst { it.trimEnd() == LICENSE_HEADING }
+        if (heading < 0) {
+            throw GradleException(
+                "README.md has no '$LICENSE_HEADING' section. The in-app license viewer reads " +
+                    "the project's licensing notice from it; restore the heading or update " +
+                    "GenerateLicenseAssets to match the new structure.",
+            )
+        }
+        val body = lines.drop(heading + 1)
+        val next = body.indexOfFirst { it.startsWith("## ") }
+        val section = if (next < 0) body else body.take(next)
+        return (listOf(LICENSE_HEADING) + section).joinToString("\n").trimEnd() + "\n"
+    }
+
+    private companion object {
+        const val ASSET_DIR = "licenses"
+        const val LICENSE_HEADING = "## License"
+    }
 }
