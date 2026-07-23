@@ -108,10 +108,19 @@ Every row must be checked off, with evidence posted, before an event date is set
 
 ### P1.2 API-36 Wear AVD created
 
+**Optional / non-gating:** the ambient string-fit check moved to the physical watch per the PM
+ruling on the tracking issue, so the API-36 AVD is a convenience for rehearsal, not gate evidence.
+
 The existing wear AVD is API 35; the watchface ambient check (Step 4.4) requires an **API 36**
 Wear OS AVD. Create it, boot it, and confirm it renders a watch face. Run every command from
 inside `nix-shell` at the repository root -- `shell.nix` is what provides the system images, and
-the SDK it exports is the only one that has them:
+the SDK it exports is the only one that has them.
+
+Prerequisite (mirrors P1.3 prerequisite 1): `android-wear-signed` is **not** in `shell.nix`'s
+`systemImageTypes` (it lists only `google_apis` and `android-wear`), so the composed SDK does not
+carry the API-36 image and the `avdmanager create` below fails with "Missing system image" on a
+clean checkout. Provision the image separately (e.g. a local, uncommitted `systemImageTypes`
+addition) before running the block.
 
 ```bash
 nix-shell --run '
@@ -136,7 +145,9 @@ Two provisioning details that otherwise cost an hour of confusion:
 **PASS:** AVD boots to a rendered watch face (press Back after boot -- the first-boot tutorial and
 notification stream sit in front of it). **Capture:** `avdmanager list avd` output + screenshot.
 
-*Rehearsed 2026-07-23: PASS. `wear_api36` boots to Wear OS 6.0 / API 36 (`ro.build.version.sdk=36`,
+*Rehearsed 2026-07-23: PASS, but obtained against an **uncommitted local `shell.nix` edit** that
+added `android-wear-signed` to `systemImageTypes` -- the step is unverified on a clean checkout.
+`wear_api36` boots to Wear OS 6.0 / API 36 (`ro.build.version.sdk=36`,
 `ro.build.characteristics=emulator,nosdcard,watch`) and renders the stock Orbita face.*
 
 ### P1.3 Phone↔wear emulator pairing rehearsed
@@ -648,8 +659,8 @@ On the staged phone from P1.5 (v0.13.0, pump paired, seed rows recorded):
    void -- the run cannot distinguish surviving data from re-synced data.
 4. Install over the top via the package installer. It must present as an **update** to the
    existing app.
-5. Open the app -- still isolated (re-run the ping check) -- and verify the **synthetic marker
-   rows** against the P1.5 comment.
+5. Open the app -- still isolated (re-run both reachability probes) -- and verify the **synthetic
+   marker rows** against the P1.5 comment.
 
 **PASS (all of):**
 - installer offered "Update" and completed without error;
