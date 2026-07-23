@@ -20,12 +20,22 @@ evidence or the data.
 
 ## Evidence policy
 
-All evidence is captured as comments on the parity tracking issue (**GLY-93**), posted **at the
-moment each step completes** -- not batched at the end. The 2026-07-23 readiness pass's evidence
-lived in an ephemeral working directory and is gone; issue comments are the durable record that the
-final sign-off links to. Each capture should include the exact command run, its full output (or a
-screenshot for on-device steps), and a timestamp. Steps below mark their minimum capture set with
-**Capture:**.
+All evidence is captured as comments on the parity tracking issue (**GLY-93**), posted
+**immediately as each step completes** -- not batched at the end. The 2026-07-23 readiness pass's
+evidence lived in an ephemeral working directory and is gone; issue comments are the durable record
+that the final sign-off links to. Each capture should include the exact command run, its full
+output (or a screenshot for on-device steps), and a timestamp. Steps below mark their minimum
+capture set with **Capture:**.
+
+**Privacy rule -- no health or account data in issue comments.** GLY-93 is an ordinary tracking
+issue, not an approved health-data store. Every row used for verification MUST be a **synthetic
+known value on the dedicated test account** (P1.5) -- never a real person's glucose, bolus, or
+basal history. Synthetic marker values may be posted verbatim (that is what makes verification
+exact); everything else is captured as hashes, row counts, version screens, and screenshots
+**redacted of account identifiers** (email, tokens, device IDs). Logs are trimmed to the relevant
+lines with identifiers removed -- never attached whole. If a sensitive artifact is ever
+unavoidable, it goes into restricted storage (1Password) with only a link and SHA-256 in the
+issue comment.
 
 ## Global abort rules
 
@@ -44,17 +54,19 @@ These apply at every step and override any instinct to "just fix it and keep goi
    tag, and the next attempt is a patch bump.
 4. **A wear-build failure at release time is gate-blocking.** `release.yml` marks the
    `:wear-device` and `:watchface` release builds `continue-on-error`, so a phone-only publish is
-   mechanically legal -- this runbook treats it as a FAIL regardless (Phase 3, check V2).
-5. **No announcement and no device work until the post-publish verification block (Phase 3) has
-   passed.** The release is not "out" until its signature, asset inventory, and version have been
-   verified against the values below.
+   mechanically legal -- this runbook treats it as a FAIL regardless (Phase 3, check V1).
+5. **No publishing, no announcement, and no device work until the verification block (Phase 3)
+   has passed against the draft.** The release does not become discoverable until its signature,
+   asset inventory, and version have been verified against the values below.
 
 ## Reference values
 
 Verified 2026-07-23 against the shipped monorepo v0.12.0/v0.13.0 release APKs, the
 1Password-stored keystore, and both repositories' `develop` heads. Phase 2 **recomputes** the
-recomputable ones at the pinned SHA -- a drift from this table is a finding to investigate before
-proceeding, never something to wave through.
+recomputable ones at the pinned SHAs -- a drift from this table is a finding to investigate before
+proceeding, never something to wave through. The release-signer digest is additionally
+**re-derived independently on event day with a second person (P2.6)** -- this table is a
+cross-check, never the sole authority on the signer.
 
 | Value | Expected |
 |-------|----------|
@@ -86,7 +98,8 @@ Every row must be checked off, with evidence posted, before an event date is set
 |------|-----|-----------|
 | `release.yml` post-build cert assertion (`apksigner verify --print-certs` == the release signer, phone + wear) | Both repos' release buildTypes **silently fall back to debug signing** when `RELEASE_KEYSTORE_FILE` is unset, and no workflow asserts the produced cert today. `release.yml` has never executed in this repository; the promotion is its first run. | **Required** |
 | `dev-pre-release.yml` run-number offset | Dev versions are `<version>-dev.<run_number>`. This repo's run counter (~5) is far below the installed cohort's monorepo lineage (dev.145), so without an offset the dev channel reports "up to date" forever. | **Required** |
-| Recorded decision on the `continue-on-error` wear/watchface release steps | Either remove `continue-on-error` or record why it stays; the runbook treats a missing wear asset as gate-blocking either way (V2). | **Required** (decision), code change recommended |
+| Draft-first release publishing (`release-please-config.json` `"draft": true`, fallback path switched to `gh release create --draft`, plus a documented post-verification publish step) | Today the release is public and reachable by a manual update check the moment it is created -- **before** any APK verification has run. Draft releases are excluded from `releases/latest`, so the verification block (P3.3) runs in containment and publishing becomes an explicit post-verification act (P3.4). | **Required** |
+| Recorded decision on the `continue-on-error` wear/watchface release steps | Either remove `continue-on-error` or record why it stays; the runbook treats a missing wear asset as gate-blocking either way (V1). | **Required** (decision), code change recommended |
 | Updater slug canonicalization in `AppUpdateChecker` / `WearAppUpdateChecker` | The updater URLs still point at `GlycemicGPT/glycemicgpt-android-unofficial` and rely on GitHub rename redirects. Redirects work today; canonicalizing removes a silent dependency. | Optional |
 | Fix dangling `CONTRIBUTING.md` references to `CLAUDE.md` | `CLAUDE.md` does not exist in this repository; contributor docs should not point at it during the event window. | Optional |
 
@@ -118,16 +131,22 @@ Also **keep a pre-offset dev APK of this repository** (e.g. today's `dev.5`) on 
 is a rolling tag, so once the run-offset PR lands it is replaced -- and Step 4.6 needs a
 pre-offset build as its dev-channel instrument.
 
-### P1.5 Physical phone staged and seed rows recorded
+### P1.5 Physical phone staged and synthetic seed rows recorded
 
-The AC1 device: a physical phone running the **v0.13.0 release build**, pump paired over BLE, with
-**at least one day of real data**. Before the event, record on the tracking issue the exact rows
-that will prove data survival: the latest N glucose readings (values + timestamps), the latest
-bolus/basal entries, and the logged-in account. An **unseeded** run self-masks a wipe: the app is
-designed to re-sync, and `allowBackup="false"` leaves no forensic trail -- so a wiped database can
-look full again minutes later and record a PASS on catastrophic data loss.
-**PASS:** phone staged; seed comment posted. **Capture:** the seed comment (screenshots of the rows
-+ Settings version screen showing 0.13.0).
+The AC1 device: a physical phone running the **v0.13.0 release build**, logged into the
+**dedicated test account**, pump paired over BLE, with at least one day of accumulated data.
+Before the event, seed it with **synthetic marker rows** -- manually entered values chosen to be
+in-range but distinctive (e.g. a manual bolus of an unusual-but-plausible size, a meal entry with
+a recognizable name, readings at memorable timestamps) -- and post the exact synthetic values,
+the relevant row counts, and a SHA-256 of the canonical marker list on the tracking issue. These
+markers, not any organic history, are what Step 4.1 verifies; because they are synthetic, posting
+them verbatim is safe (see the privacy rule) and makes verification exact. An **unseeded** run
+self-masks a wipe: the app is designed to re-sync, and `allowBackup="false"` leaves no forensic
+trail -- so a wiped database can look full again minutes later and record a PASS on catastrophic
+data loss.
+**PASS:** phone staged on the test account; synthetic-marker comment posted. **Capture:** the
+marker comment (exact values + counts + hash) and a Settings version screenshot showing 0.13.0,
+redacted of account identifiers.
 
 ### P1.6 Monorepo `develop` red gates triaged
 
@@ -171,6 +190,21 @@ mid-window would invalidate the pinned parity SHAs. Confirm the app is not enabl
 dormant.
 **PASS:** no Renovate activity possible on `develop`. **Capture:** statement + app-settings screenshot.
 
+### P1.10 Recovery path pre-staged
+
+Once a bad higher version is installed on a device, deleting the release cannot undo it -- the
+**only** recovery is publishing an even higher signed version (see the appendix). That path must
+be proven **before** the event, not assembled during an incident:
+
+- a **named on-call maintainer** for the event window with release-approval rights;
+- **verified signing access**: an `op read` of the release keystore item succeeds for that person
+  (the P2.6 signer re-verification doubles as this proof if done by the on-call);
+- a written **emergency plan**: the next patch `Release-As` version reserved, and the exact
+  command sequence (P2.1 → P3.4) that would ship it;
+- a **time bound**: target ≤ 2 hours from FAIL declaration to a published roll-forward release.
+
+**PASS:** all four posted on the tracking issue. **Capture:** the plan comment.
+
 ## Phase 2 -- Pin, freeze, and capture (event start)
 
 ### P2.1 Land the `Release-As` version commit
@@ -178,7 +212,7 @@ dormant.
 Open a PR to `develop` whose **squash commit message** carries the ruled version as a
 release-please footer, e.g.:
 
-```
+```text
 chore: force first stable release version
 
 Release-As: 0.14.0
@@ -253,9 +287,11 @@ git rev-parse "$MONO_PIN:plugins/pump-driver-api" \
 ```
 
 **PASS:** each pair matches across repositories (and matches the reference table; the pump-driver
-re-pin at `$PIN` is the pump-driver-equivalence evidence artifact). **FAIL:** any mismatch -- stop
-and diff the trees (`git diff v0.13.0:<mono-path> $PIN:<path>`); the event does not proceed until
-the divergence is explained and either resolved or formally accepted.
+re-pin at `$PIN` is the pump-driver-equivalence evidence artifact). **FAIL:** any mismatch is a
+**NO-GO -- the event stops.** There is no operator-level waiver: diff the trees
+(`git diff v0.13.0:<mono-path> $PIN:<path>`), post the finding, and end the attempt. Intentional
+divergence can only ever be authorized by a **PM ruling recorded on the tracking issue before the
+event**, with replacement compatibility evidence -- never by an inline judgment call mid-event.
 **Capture:** `$MONO_PIN` and both command outputs, verbatim.
 
 ### P2.5 Capture green check-runs at the pin
@@ -267,6 +303,30 @@ gh api "repos/lumose-health/android-unofficial/commits/$PIN/check-runs" \
 
 **PASS:** all required checks (`Android Gate`, `Security Scan Gate`, `Dependency Scan Gate`,
 `Workflow Lint`, `Workflow Security`) concluded `success`. **Capture:** the output.
+
+### P2.6 Independently re-verify the signer anchor (two people)
+
+The `55f0d0cd…` digest in the reference table is a historical verification (2026-07-23). Before
+any approval is given, re-derive it **from the sources, on event day**:
+
+1. The on-call maintainer materializes the release keystore from the 1Password `android-signing`
+   item just long enough to print its fingerprint, then shreds it (enter the store password from
+   the same item when `keytool` prompts):
+
+   ```bash
+   umask 077
+   op read "op://github/android-signing/release.jks" --out-file /tmp/parity-release.jks
+   keytool -list -keystore /tmp/parity-release.jks | grep -i "SHA-256\|SHA256"
+   shred -u /tmp/parity-release.jks
+   ```
+
+2. A **second person** independently runs `apksigner verify --print-certs` on a shipped monorepo
+   v0.13.0 release APK and reads its digest aloud.
+3. Both values must equal each other **and** the reference-table digest. Any disagreement is a
+   NO-GO before anything has happened -- resolve which value is real before rescheduling.
+
+**PASS:** three-way match, confirmed by two named people. **Capture:** both outputs + both names
+on the tracking issue.
 
 ## Phase 3 -- Promotion and release
 
@@ -297,11 +357,15 @@ the release-pipeline ones, in order, verifying each job's output before approvin
 
 **Run 2 (trigger: the `chore: release X` push):**
 
-4. **Release Please** (again) -- **this approval is what mints the tag and the GitHub Release.**
-   Verify the run shows the expected tag before approving.
+4. **Release Please** (again) -- **this approval is what mints the tag and the GitHub Release**,
+   which per the P1.1 draft-first hardening is created as a **draft** (invisible to
+   `releases/latest` and to every installed updater). Verify the run shows the expected tag, and
+   confirm the release really is a draft (`gh release view "$TAG" --json isDraft`) before
+   proceeding -- if it is not a draft, the containment assumption is void: treat any subsequent
+   verification failure as a live incident (bundle + delete immediately, abort ladder rung 2).
 5. **Build & Upload Release APK** -- ⛔ **this approval is the last free abort.** Declining it
-   leaves a tag and an asset-less release and **no installed user affected** (delete the
-   asset-less release per the abort ladder). If anything above looked wrong, decline here.
+   leaves a tag and an asset-less draft and **no installed user affected** (delete the draft per
+   the abort ladder). If anything above looked wrong, decline here.
 
 **Leave pending -- do not approve until Phase 4 completes:**
 
@@ -313,73 +377,102 @@ the release-pipeline ones, in order, verifying each job's output before approvin
 
 **Capture:** both run URLs and, per approval, the job output you verified before approving.
 
-### P3.3 Post-publish verification block
+### P3.3 Verification block (runs against the DRAFT, before anything is discoverable)
 
-Run **before any announcement and before any device work**. Download every asset of the new
-release to a clean directory:
+Run while the release is still a draft -- **before publishing, before any announcement, and
+before any device work**. No wildcard ever touches this block: every check names its file
+exactly, because a `GlycemicGPT-*-release.apk` glob also matches the Wear and the
+intentionally-unsigned WatchFace APKs. Download every asset to a clean directory:
 
 ```bash
-TAG=v0.14.0   # the tag just published
+TAG=v0.14.0        # the tag just created
+VER="${TAG#v}"
 gh release download "$TAG" --repo lumose-health/android-unofficial -D "parity-$TAG"
 ```
 
-**V1 -- signing certificate (phone AND wear).** Name the files exactly -- a
-`GlycemicGPT-*-release.apk` glob also matches the Wear and WatchFace APKs:
+**V1 -- exact asset inventory (checked first; missing AND extra assets both fail).**
 
 ```bash
-VER="${TAG#v}"
+printf '%s\n' \
+  "GlycemicGPT-${VER}-release.apk" \
+  "GlycemicGPT-WatchFace-Analog-${VER}-release.apk" \
+  "GlycemicGPT-WatchFace-Digital-${VER}-release.apk" \
+  "GlycemicGPT-Wear-${VER}-release.apk" | LC_ALL=C sort > expected-assets.txt
+ls -1 "parity-$TAG" | LC_ALL=C sort | diff -u expected-assets.txt -
+```
+
+The diff must be **empty** -- the release carries exactly these four APKs, no more, no fewer.
+A missing wear or watchface asset means its `continue-on-error` build step failed silently
+(gate-blocking, per global rule 4); an unexpected extra (a stray or wrong-version APK) is equally
+a FAIL, because installed v0.13.0 selectors pick by unanchored matching. (This check was
+validated against a correct set, a phone-only publish, and a stray-extra-asset scenario --
+all three behave as stated.)
+**FAIL:** any diff output → abort ladder rung 2.
+
+**V2 -- signing certificate, each APK by explicit name.**
+
+```bash
 apksigner verify --print-certs "parity-$TAG/GlycemicGPT-${VER}-release.apk"        # phone
 apksigner verify --print-certs "parity-$TAG/GlycemicGPT-Wear-${VER}-release.apk"   # wear
 ```
 
-Both SHA-256 digests must equal the release signer in the reference table
-(`55f0d0cd…342990`). Note: this check applies to the **phone and wear** APKs only -- the two
-WatchFace release-page APKs are unsigned by long-standing (pre-split) behavior; the artifacts users
-actually receive are the committed in-app WFF assets verified in Step 4.4.
+Both SHA-256 digests must equal the P2.6 re-verified release signer (`55f0d0cd…342990`). The two
+WatchFace APKs are **deliberately excluded** from this check -- they are unsigned by long-standing
+pre-split behavior, and the artifacts users actually receive are the committed in-app WFF assets
+verified in Step 4.4. Do not let any tooling glob them into a signature check in either direction.
 **FAIL:** any other digest (the debug cert `b04eacc8…` here means the keystore never materialized
-and the build fell back to debug signing) → `gh release delete "$TAG"` and **STOP**.
+and the build fell back to debug signing) → abort ladder rung 2.
 
-**V2 -- full four-APK asset inventory.** The release must carry exactly:
-
-```
-GlycemicGPT-<version>-release.apk
-GlycemicGPT-Wear-<version>-release.apk
-GlycemicGPT-WatchFace-Digital-<version>-release.apk
-GlycemicGPT-WatchFace-Analog-<version>-release.apk
-```
-
-A missing wear or watchface asset means its `continue-on-error` build step failed silently.
-**FAIL:** anything missing → delete the release and **STOP**; a phone-only publish silently
-unfulfils the wear leg of the gate.
-
-**V3 -- version identity.**
+**V3 -- version identity, phone AND wear.**
 
 ```bash
-aapt dump badging "parity-$TAG/GlycemicGPT-${VER}-release.apk" | head -1
+aapt dump badging "parity-$TAG/GlycemicGPT-${VER}-release.apk"      | grep '^package:'
+aapt dump badging "parity-$TAG/GlycemicGPT-Wear-${VER}-release.apk" | grep '^package:'
 ```
 
-`package: name` must be `com.glycemicgpt.mobile`; `versionCode` must be **> 130000** and equal the
-planned value (e.g. `140000`); `versionName` must match the tag.
-**FAIL:** any mismatch → delete the release and **STOP**.
+For **each** of the two: `name` must be `com.glycemicgpt.mobile`; `versionCode` must be
+**> 130000** and equal the planned value (e.g. `140000`); `versionName` must match `$VER`.
+**FAIL:** any mismatch on either APK → abort ladder rung 2.
 
-**Capture:** all three commands' full output + the release asset listing.
+**Capture:** all command output above, plus `sha256sum parity-$TAG/*` (the checksums also feed
+Step 4.1's install-integrity check and, on a FAIL, the failure bundle).
 
-### P3.4 Abort ladder
+### P3.4 Publish the release
+
+Only after V1--V3 all PASS:
+
+```bash
+gh release edit "$TAG" --repo lumose-health/android-unofficial --draft=false --latest
+gh release view "$TAG" --json isDraft,isLatest   # isDraft false, isLatest true
+```
+
+Publishing is the go-live act -- from this moment the release is discoverable by every installed
+updater. **Capture:** the edit + view output.
+
+### P3.5 Abort ladder
 
 In escalating order -- each rung is complete in itself; never skip down the ladder:
 
-1. **Before APKs exist:** decline the Build & Upload approval. No installed user is affected, but
-   the tag and an **asset-less release** already exist at this point (run 2 created them) --
-   delete the release (`gh release delete "$TAG"`, tag kept) so `releases/latest` never serves an
-   empty release, then fix on `develop` (freeze lifted for the fix only) and restart from P2.1
-   with the next patch `Release-As`.
-2. **After publish, verification failed:** `gh release delete <tag>` (⛔ **keep the tag** -- see
-   the appendix for why deletion genuinely stops the bleed). Fix, then restart from P2.1. ⛔ The
-   burned version number is never reused: the next attempt is a patch bump, because a re-released
-   equal versionCode is invisible to every installed updater.
-3. **After device work has started (Phase 4 FAIL):** same as rung 2, plus post the FAIL evidence
-   before touching anything else -- the failed state on the test phone is diagnostic evidence;
-   ⛔ do not uninstall, clear data, or "reset and retry" until it has been captured and understood.
+1. **Before APKs exist:** decline the Build & Upload approval. No installed user is affected;
+   post the decline reason on the tracking issue, delete the asset-less draft
+   (`gh release delete "$TAG"`, tag kept), then fix on `develop` (freeze lifted for the fix only)
+   and restart from P2.1 with the next patch `Release-As`.
+2. **Verification failed (draft or, worse, published):** ⛔ **persist the failure bundle FIRST,
+   delete SECOND.** The bundle -- posted to the tracking issue before any deletion -- is: the
+   release asset listing, `sha256sum parity-$TAG/*`, the failing `apksigner`/`aapt`/diff output,
+   and confirmation that the local `parity-$TAG` directory is archived and kept (post its
+   directory-archive hash). The downloaded copies are the only forensic record of what was almost
+   shipped; deleting the release first can strand the diagnosis. While the release is still a
+   draft this costs nothing (it is not discoverable); if it was already published, the bundle is
+   already on local disk from P3.3 -- posting it takes seconds and still precedes the delete.
+   Then `gh release delete "$TAG"` (⛔ **keep the tag** -- see the appendix for why deletion
+   genuinely stops the bleed). Fix, then restart from P2.1. ⛔ The burned version number is never
+   reused: the next attempt is a patch bump, because a re-released equal versionCode is invisible
+   to every installed updater.
+3. **After device work has started (Phase 4 FAIL):** same as rung 2, plus post the on-device FAIL
+   evidence before touching anything else -- the failed state on the test phone is diagnostic
+   evidence; ⛔ do not uninstall, clear data, or "reset and retry" until it has been captured and
+   understood.
 
 ## Phase 4 -- Device parity
 
@@ -401,25 +494,41 @@ On the staged phone from P1.5 (v0.13.0, pump paired, seed rows recorded):
    ```
 2. Enable **airplane mode**, then re-enable **Bluetooth only**. Airplane mode is the point of the
    test: with the network up, the app re-syncs and a wiped database refills itself -- the wipe
-   self-masks, and `allowBackup="false"` means there is no backup artifact to autopsy afterwards.
-3. Install over the top via the package installer. It must present as an **update** to the
+   self-masks, and `allowBackup="false"` means there is no backup artifact to autopsy afterward.
+3. **Assert the isolation -- do not infer it from the toggle.** A surviving Wi-Fi association,
+   cellular data path, or VPN produces exactly the false PASS this step exists to prevent:
+
+   ```bash
+   adb shell settings get global airplane_mode_on   # must print 1
+   adb shell settings get global wifi_on            # must print 0
+   adb shell ping -c 1 -W 2 8.8.8.8                 # must FAIL (network unreachable)
+   ```
+
+   All three must hold **before install**, and the ping must be re-run (and still fail)
+   **immediately before row validation** in step 5. If any check shows a live network path, fix
+   it before installing; if a network was live at any point after install, the row validation is
+   void -- the run cannot distinguish surviving data from re-synced data.
+4. Install over the top via the package installer. It must present as an **update** to the
    existing app.
-4. Open the app -- still in airplane mode -- and verify against the recorded seed comment.
+5. Open the app -- still isolated (re-run the ping check) -- and verify the **synthetic marker
+   rows** against the P1.5 comment.
 
 **PASS (all of):**
 - installer offered "Update" and completed without error;
 - app opens **logged in** (no login screen);
-- every recorded seed row is present, byte-for-byte (values + timestamps);
+- every synthetic marker row from the P1.5 comment is present with its exact values + timestamps;
 - pump BLE pairing intact -- the pump reconnects without re-pairing;
-- Settings shows the new versionName/versionCode.
+- Settings shows the new versionName/versionCode;
+- the isolation checks held throughout (step 3).
 
 **FAIL (any of):** an install error ("App not installed", signature mismatch, downgrade block), a
-login screen, any missing or altered seed row, or a dead pairing.
+login screen, any missing or altered marker row, a dead pairing, or an isolation check that failed
+after install (which voids the run rather than passing it).
 ⛔ **On install failure, never uninstall to proceed** (global rule 1) -- capture the installer
 error and `adb logcat` tail, then go to abort-ladder rung 3.
 
-**Capture:** before/after screenshots of the seed rows, the installer prompt, Settings version
-screen, pump connection state.
+**Capture:** before/after screenshots of the marker rows (redacted of account identifiers), the
+isolation-check outputs, the installer prompt, Settings version screen, pump connection state.
 
 ### Step 4.2 -- Phone↔watch messaging in the skew configuration (AC2)
 
@@ -427,8 +536,18 @@ Run with the **upgraded phone + the old (monorepo-built) watch app** -- the exac
 migrating user passes through, since the phone always upgrades first.
 
 1. **Chat quick-query first.** Send a quick query from the watch. Its visible ~30 s timeout is the
-   loss-vs-latency discriminator: a response inside the window proves the Data Layer round-trip; a
-   timeout is a clean transport FAIL rather than an ambiguous hang.
+   loss-vs-latency discriminator: a timeout is a clean transport FAIL rather than an ambiguous
+   hang. A displayed response is phone-mediated by construction -- the watch has no chat path of
+   its own, so an answer can only have travelled watch → phone relay → backend → phone → watch --
+   but guard the two ways a *stale* artifact could still fake it:
+   - use a **data-dependent** quick query (e.g. current glucose), and require the response to
+     reflect the device's present state -- a cached or previously-rendered answer cannot;
+   - keep a **phone-serial-qualified** log monitor running during the test,
+     `adb -s <phone-serial> logcat -v time -s GlycemicGPT`, to catch relay *failure* lines. Note
+     the relay's success-path lines (`Received chat request from watch`, `Sent chat response to
+     watch`) are debug-level and compiled out of release builds by the WARN-floor logging tree --
+     their absence is expected on a healthy run and must not be read as a FAIL; only failure
+     lines appear, and any that do appear are a FAIL even if a response rendered.
 2. **Alert-dismiss round-trip.** Trigger an alert, dismiss it on the watch, and judge the result
    **phone-side only**: the alert must show **acknowledged in the phone UI within ~10 s**. That UI
    state is the sole PASS instrument on a release build -- `WearChatRelayService`'s success-path
@@ -441,9 +560,12 @@ migrating user passes through, since the phone always upgrades first.
    result and clears the alert locally unconditionally, so a dead transport still *looks* dismissed
    on the watch. Watch-side appearance is not evidence.
 
-**PASS:** quick-query response within the timeout AND phone-side acknowledgment within ~10 s.
-**FAIL:** quick-query timeout, or no phone-side acknowledgment (regardless of what the watch shows).
-**Capture:** watch + phone screenshots with timestamps (logcat failure lines too, if any appeared).
+**PASS:** a data-dependent quick-query response within the timeout with no relay failure lines,
+AND phone-side alert acknowledgment within ~10 s.
+**FAIL:** quick-query timeout, any relay failure line, or no phone-side acknowledgment
+(regardless of what the watch shows).
+**Capture:** watch + phone screenshots with timestamps, redacted of account identifiers (plus any
+logcat failure lines).
 
 ### Step 4.3 -- Wear OTA push (the watch's only upgrade path)
 
@@ -496,9 +618,33 @@ event day. Three parts, all required:
 
 1. **Source identity** -- the P2.4 re-pin of `plugins/pump-driver-api` and `plugins/shipped` at
    `$PIN` (this is the evidence artifact; expected values in the reference table).
-2. **Toolchain identity** -- both repos already pin Gradle 8.12 / AGP 8.7.3 / Kotlin 2.1.0 /
-   JDK 17 with identical lockfiles; the P2.4 tree hashes cover the module sources, and the green
-   gates at `$PIN` cover the locked build.
+2. **Toolchain identity -- verified, not asserted.** Compare the blob hashes of the toolchain
+   definition and every module lockfile across the two pins (plugin-module lockfiles are already
+   inside the matched plugin trees). All seven pairs were verified identical on 2026-07-23;
+   recompute them at the pins -- each pair must match, same NO-GO rule as P2.4:
+
+   ```bash
+   # This repo:
+   git rev-parse "$PIN:gradle/libs.versions.toml" \
+                 "$PIN:gradle/wrapper/gradle-wrapper.properties" \
+                 "$PIN:gradle.properties" \
+                 "$PIN:settings-gradle.lockfile" \
+                 "$PIN:app/gradle.lockfile" \
+                 "$PIN:wear-device/gradle.lockfile" \
+                 "$PIN:watchface/gradle.lockfile"
+   # Monorepo (same seven, under the apps/mobile/ prefix):
+   git rev-parse "$MONO_PIN:apps/mobile/gradle/libs.versions.toml" \
+                 "$MONO_PIN:apps/mobile/gradle/wrapper/gradle-wrapper.properties" \
+                 "$MONO_PIN:apps/mobile/gradle.properties" \
+                 "$MONO_PIN:apps/mobile/settings-gradle.lockfile" \
+                 "$MONO_PIN:apps/mobile/app/gradle.lockfile" \
+                 "$MONO_PIN:apps/mobile/wear-device/gradle.lockfile" \
+                 "$MONO_PIN:apps/mobile/watchface/gradle.lockfile"
+   ```
+
+   Then capture `./gradlew --version` from **both** pinned checkouts -- Gradle 8.12 and a
+   JVM 17 line, byte-comparable across the two outputs (AGP 8.7.3 / Kotlin 2.1.0 are pinned by
+   the now-proven-identical `libs.versions.toml`).
 3. **Dual green unit suites** -- at the pinned SHAs, in **both** repositories. In this repo, run
    at `$PIN` (the repo root is the Gradle root). In the monorepo, run at a checkout or worktree of
    **`$MONO_PIN`** (captured in P2.4 -- not whatever `develop` has drifted to since), from its
@@ -512,9 +658,11 @@ event day. Three parts, all required:
    1.4 IU; Tandem IoB 0.192/0.154 U, basal 1.0 U/hr; the real 780G SAKE trace), so a pass is a
    behavioral statement about real pump bytes, not just compilation.
 
-**PASS:** hashes match + both suites 100% green. **FAIL:** any divergence -- **STOP the event**;
-this is the safety-critical leg and there is no accepted-residual path around it.
-**Capture:** both test-run summaries (repo, SHA, task, result counts).
+**PASS:** all tree and toolchain hash pairs match + matching `--version` outputs + both suites
+100% green. **FAIL:** any divergence -- **STOP the event**; this is the safety-critical leg and
+there is no accepted-residual path around it.
+**Capture:** both hash-comparison outputs, both `./gradlew --version` outputs, and both test-run
+summaries (repo, SHA, task, result counts).
 
 ### Step 4.6 -- Updater discovery from the new build (AC3)
 
@@ -543,8 +691,13 @@ dev version so the offset comparison is legible).
 
 ### P5.1 Gate sign-off
 
-The accountable maintainer posts the sign-off comment on the tracking issue: an enumeration of
-every gate leg with a link to each captured evidence comment. Two standing notes belong in it:
+Before posting, close the pinning loop: re-run `git rev-parse origin/develop` in **both**
+repositories. This repository's head must still equal `$PIN` (the freeze held); if the monorepo
+head has moved past `$MONO_PIN`, confirm every monorepo evidence item cites `$MONO_PIN` -- the
+pins are what the evidence anchors to, and the sign-off records both final heads either way.
+
+The accountable maintainer then posts the sign-off comment on the tracking issue: an enumeration
+of every gate leg with a link to each captured evidence comment. Two standing notes belong in it:
 
 - the parity-plan review requirement is satisfied by this runbook's own reviewed PR;
 - the Sentry validation gate is **N/A** for this gate by ruling -- it is backend/web/sidecar-scoped,
@@ -558,11 +711,24 @@ The final monorepo mobile release, whose build already points updaters at this r
 separate event with its own constraints, restated here because this runbook's Phase 1/P1.8
 decisions feed it:
 
-- ⛔ **Phone APK only.** Delete the Wear and WatchFace assets from the bridging release before
-  announcing it. Installed v0.13.0 devices run the pre-anchored `firstOrNull` APK selector, which
-  matches all four release assets and picks the phone APK only by asset-ordering luck; the wear APK
-  shares the same `applicationId` and cert, so a wear-first ordering would install the **Wear APK
-  over the phone app** -- killing CGM display and the local alert floor on a user's primary device.
+- ⛔ **Phone APK only -- asserted, not assumed.** Delete the Wear and WatchFace assets from the
+  bridging release, then **verify the surviving asset set before any announcement**: the release
+  must carry **exactly one** asset, the phone APK by its exact name, and that file must verify
+  against the release signer:
+
+  ```bash
+  gh release view <bridging-tag> --repo lumose-health/GlycemicGPT \
+    --json assets --jq '.assets[].name'          # exactly one line: the phone APK
+  gh release download <bridging-tag> --repo lumose-health/GlycemicGPT -D bridging-check
+  apksigner verify --print-certs bridging-check/<phone-apk-name>   # == 55f0d0cd…342990
+  ```
+
+  Any Wear or WatchFace asset still present, any extra asset, or a wrong digest → **abort the
+  announcement** and fix first. Why this is absolute: installed v0.13.0 devices run the
+  pre-anchored `firstOrNull` APK selector, which matches all four release assets and picks the
+  phone APK only by asset-ordering luck; the wear APK shares the same `applicationId` and cert,
+  so a wear-first ordering would install the **Wear APK over the phone app** -- killing CGM
+  display and the local alert floor on a user's primary device.
 - **Version-coordinated:** strictly **below** this repository's first stable (P1.8), so migrated
   users are never downgrade-blocked and un-migrated users still see the hop.
 - **Monorepo gates green first** (P1.6 triage must be complete).
@@ -589,5 +755,7 @@ Why "delete the release" is a real mitigation and what it does not cover:
 - **Field rollback is roll-forward.** Android will not install a lower versionCode over a higher
   one, so a bad shipped build is superseded by publishing a **higher** versionCode -- realistically
   **1--2 hours** with a maintainer at the keyboard (patch bump through the same gated pipeline).
+  This path is pre-staged before the event -- named on-call, verified key access, reserved
+  emergency version, time bound -- per P1.10; it is never assembled during the incident.
 - Burned version numbers stay burned (global rule 3): the tag remains, the number is never reused,
   and the next attempt is always a patch bump.
