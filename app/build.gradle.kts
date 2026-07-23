@@ -1,4 +1,9 @@
+import groovy.json.JsonSlurper
+import org.gradle.api.artifacts.component.ModuleComponentIdentifier
+import java.io.InputStream
 import java.security.MessageDigest
+import java.util.zip.ZipFile
+import java.util.zip.ZipInputStream
 
 plugins {
     alias(libs.plugins.android.application)
@@ -6,6 +11,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.hilt.android)
     alias(libs.plugins.ksp)
+    alias(libs.plugins.licensee)
 }
 
 android {
@@ -202,6 +208,16 @@ android {
             it.inputs.file("../README.md")
             it.inputs.file("../LICENSE")
             it.inputs.file("../docs/THIRD_PARTY_LICENSES.md")
+            // The redistributed-component assets are generated rather than copied, so the gate
+            // tracks the canonical licence texts they draw on and the generator's own output.
+            // The generated directory is referenced through the task's own output provider, not
+            // as a bare path, so Gradle sees the producer/consumer edge and re-runs the gate
+            // when the generated documents change (a bare path would be an undeclared dependency).
+            it.inputs.dir("../docs/licenses")
+            it.inputs.dir(
+                tasks.named<GenerateDependencyAttribution>("generateDependencyAttribution")
+                    .flatMap { task -> task.outputDir },
+            )
         }
     }
 
@@ -209,6 +225,127 @@ android {
     // can build historical schema versions for migration tests.
     sourceSets.getByName("androidTest").assets.srcDirs(files("$projectDir/schemas"))
 }
+
+// Attribution for what the binaries redistribute, as opposed to the source lineage recorded
+// in docs/THIRD_PARTY_LICENSES.md. Built from the release runtime graph of every module that
+// ships an APK, so the set of components can never be a stale hand-maintained list.
+//
+// The three modules are read here rather than each generating its own document because the
+// licence viewer lives in :app and has to speak for the whole release: five of the six
+// upstream NOTICE files this discharges are reachable only through :wear-device.
+val runtimeAttributionSources = listOf(
+    AttributionSource(":app", "licenseeAndroidRelease", "releaseRuntimeClasspath"),
+    AttributionSource(":wear-device", "licenseeAndroidRelease", "releaseRuntimeClasspath"),
+    AttributionSource(
+        ":watchface",
+        "licenseeAndroidDigitalFullRelease",
+        "digitalFullReleaseRuntimeClasspath",
+    ),
+    AttributionSource(
+        ":watchface",
+        "licenseeAndroidAnalogMechanicalRelease",
+        "analogMechanicalReleaseRuntimeClasspath",
+    ),
+)
+
+// Licence resolution for components whose POM declares no SPDX identifier. Licensee lets these
+// through via the allowlist in the root build file, but that only settles policy; attribution
+// still needs to know which terms to reproduce. Each maps a component to the licence text that
+// covers it: an SPDX identifier for the ones whose licence simply was not machine-readable in
+// the POM, or a bundled text of its own (BouncyCastle, CUP) for the two that are neither SPDX
+// nor ship their text in the artifact. The generator fails on any unmapped component not listed
+// here or in [unreproducedRuntimeLicenses], so a new dependency with an unreadable licence
+// cannot slip through unattributed.
+val unmappedRuntimeLicenses = mapOf(
+    // JitPack builds publish no licence metadata; Apache-2.0 upstream.
+    "com.github.jeziellago:Markwon:58aa5aba6a" to "Apache-2.0",
+    "com.github.jeziellago:compose-markdown:0.5.8" to "Apache-2.0",
+    "com.github.xgouchet:AXML:v1.0.1" to "Apache-2.0",
+    // POM declares "The BSD License" as an unmapped name; upstream LICENSE is BSD-3-Clause.
+    "com.twelvemonkeys.common:common-image:3.9.4" to "BSD-3-Clause",
+    "com.twelvemonkeys.common:common-io:3.9.4" to "BSD-3-Clause",
+    "com.twelvemonkeys.common:common-lang:3.9.4" to "BSD-3-Clause",
+    "com.twelvemonkeys.imageio:imageio-core:3.9.4" to "BSD-3-Clause",
+    "com.twelvemonkeys.imageio:imageio-metadata:3.9.4" to "BSD-3-Clause",
+    "com.twelvemonkeys.imageio:imageio-webp:3.9.4" to "BSD-3-Clause",
+    // POM declares the licence by URL rather than SPDX identifier.
+    "com.atlassian.commonmark:commonmark:0.13.0" to "BSD-2-Clause",
+    "com.atlassian.commonmark:commonmark-ext-gfm-strikethrough:0.13.0" to "BSD-2-Clause",
+    "com.atlassian.commonmark:commonmark-ext-gfm-tables:0.13.0" to "BSD-2-Clause",
+    // Non-SPDX licences that ship no text in the artifact -- bundled under docs/licenses.
+    "org.bouncycastle:bcprov-jdk18on:1.84" to "BouncyCastle",
+    "edu.princeton.cup:java-cup:10k" to "CUP",
+)
+
+// Components whose licence terms are not reproduced as a bundled text here, with where they are.
+// Google Play services ship under Google's proprietary Android SDK licence, which is not an
+// open-source text to bundle; SQLCipher is reproduced in full under Third-Party Licenses.
+val unreproducedRuntimeLicenses = mapOf(
+    "com.google.android.gms:play-services-base:18.5.0"
+        to "Android Software Development Kit License -- https://developer.android.com/studio/terms",
+    "com.google.android.gms:play-services-basement:18.4.0"
+        to "Android Software Development Kit License -- https://developer.android.com/studio/terms",
+    "com.google.android.gms:play-services-tasks:18.2.0"
+        to "Android Software Development Kit License -- https://developer.android.com/studio/terms",
+    "com.google.android.gms:play-services-wearable:18.2.0"
+        to "Android Software Development Kit License -- https://developer.android.com/studio/terms",
+    "net.zetetic:sqlcipher-android:4.13.0"
+        to "BSD-style Zetetic licence, reproduced in full under Third-Party Licenses above",
+    "org.openminimed:javasake:0.2.0"
+        to "GNU General Public License v3.0 -- the license this application ships under; " +
+        "its full text is the GPL-3.0 document in this screen",
+)
+
+val generateDependencyAttribution =
+    tasks.register<GenerateDependencyAttribution>("generateDependencyAttribution") {
+        group = "build"
+        description =
+            "Builds the redistributed-dependency attribution documents from the release " +
+                "runtime graph of every module that ships an APK."
+        licenseTexts.set(rootProject.layout.projectDirectory.dir("docs/licenses"))
+        outputDir.set(layout.buildDirectory.dir("generated/attribution"))
+        unmappedLicenses.set(unmappedRuntimeLicenses)
+        unreproducedLicenses.set(unreproducedRuntimeLicenses)
+
+        runtimeAttributionSources.forEach { source ->
+            // Cross-project reads: the sibling modules are applications, so :app cannot pull
+            // their graphs in as ordinary dependencies. evaluationDependsOn guarantees AGP has
+            // created the variant configurations before they are looked up here. This couples the
+            // task to sibling internals and is not configuration-cache compatible, which is an
+            // accepted tradeoff for keeping one viewer that speaks for the whole release.
+            evaluationDependsOn(source.projectPath)
+            val sourceProject = project(source.projectPath)
+
+            licenseeReports.from(
+                sourceProject.tasks.named(source.licenseeTask).map { it.outputs.files.asFileTree },
+            )
+
+            // Published archives only. Project dependencies are this repository's own GPL-3.0
+            // modules -- already covered by the project's own notice, and excluded by Licensee
+            // for the same reason -- and asking for their artifacts without naming an
+            // artifactType is ambiguous across the variants AGP publishes for them. Resolution is
+            // strict (no lenient view): an artifact that failed to resolve would silently drop its
+            // NOTICE, so a resolution failure should break the build, not the attribution.
+            val resolvedArtifacts = sourceProject.configurations
+                .named(source.runtimeConfiguration)
+                .flatMap { configuration ->
+                    configuration.incoming
+                        .artifactView { componentFilter { it is ModuleComponentIdentifier } }
+                        .artifacts
+                        .resolvedArtifacts
+                }
+
+            // Content-tracked for up-to-date checks. The coordinate-to-path map below is derived
+            // from the same provider and used only to label notices at execution time, so it is
+            // not itself a task input (absolute paths would defeat build-cache relocatability).
+            artifactFiles.from(resolvedArtifacts.map { artifacts -> artifacts.map { it.file } })
+            artifactsByCoordinates.putAll(
+                resolvedArtifacts.map { artifacts ->
+                    artifacts.associate { it.id.componentIdentifier.displayName to it.file.path }
+                },
+            )
+        }
+    }
 
 // The in-app license viewer reads its text out of the APK's assets rather than from a
 // hand-maintained copy in source, so the screen and the repository's license documents
@@ -219,6 +356,12 @@ val generateLicenseAssets = tasks.register<GenerateLicenseAssets>("generateLicen
     readme.set(rootProject.layout.projectDirectory.file("README.md"))
     fullLicense.set(rootProject.layout.projectDirectory.file("LICENSE"))
     thirdPartyLicenses.set(rootProject.layout.projectDirectory.file("docs/THIRD_PARTY_LICENSES.md"))
+    runtimeDependencies.set(
+        generateDependencyAttribution.flatMap { it.componentsDocument },
+    )
+    runtimeDependencyLicenses.set(
+        generateDependencyAttribution.flatMap { it.licenseTextDocument },
+    )
 }
 
 androidComponents {
@@ -356,6 +499,16 @@ abstract class GenerateLicenseAssets : DefaultTask() {
     @get:PathSensitive(PathSensitivity.NONE)
     abstract val fullLicense: RegularFileProperty
 
+    /** Components the APKs redistribute, generated by [GenerateDependencyAttribution]. */
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.NONE)
+    abstract val runtimeDependencies: RegularFileProperty
+
+    /** License texts and upstream NOTICE content for those components. */
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.NONE)
+    abstract val runtimeDependencyLicenses: RegularFileProperty
+
     /** Attributions for the upstream work this app ports, depends on, or was informed by. */
     @get:InputFile
     @get:PathSensitive(PathSensitivity.NONE)
@@ -374,6 +527,10 @@ abstract class GenerateLicenseAssets : DefaultTask() {
             .writeText(contentOf(thirdPartyLicenses))
         assetDir.resolve("gpl-3.0.txt")
             .writeText(contentOf(fullLicense))
+        assetDir.resolve("runtime_dependencies.md")
+            .writeText(contentOf(runtimeDependencies))
+        assetDir.resolve("runtime_dependency_licenses.txt")
+            .writeText(contentOf(runtimeDependencyLicenses))
     }
 
     /**
@@ -417,5 +574,329 @@ abstract class GenerateLicenseAssets : DefaultTask() {
     private companion object {
         const val ASSET_DIR = "licenses"
         const val LICENSE_HEADING = "## License"
+    }
+}
+
+/** One APK-shipping variant whose resolved runtime graph must be attributed. */
+data class AttributionSource(
+    val projectPath: String,
+    val licenseeTask: String,
+    val runtimeConfiguration: String,
+)
+
+/**
+ * Builds the attribution for everything the release APKs redistribute.
+ *
+ * The component list comes from Licensee's resolved-graph reports rather than from a document
+ * someone remembers to update, so a dependency cannot enter the build without entering the
+ * attribution: adding one changes the graph, which changes this task's inputs, which rewrites
+ * the assets in the same build. Licensee's own allowlist (see the root build file) is the other
+ * half of that gate -- it fails the build on a licence this project has not ruled on, so a
+ * Renovate bump cannot quietly introduce a component whose terms nobody has read.
+ *
+ * Two documents come out, split the way the viewer already splits its assets: a markdown list
+ * of components, and a plain-text file of license texts. License texts must not reach the
+ * markdown renderer -- their numbered clauses parse as list markers and their indented lines as
+ * code blocks, which is why the GPL is handled as plain text too.
+ */
+@CacheableTask
+abstract class GenerateDependencyAttribution : DefaultTask() {
+
+    /** Licensee `artifacts.json` reports, one per attributed variant. */
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.NONE)
+    abstract val licenseeReports: ConfigurableFileCollection
+
+    /** Canonical license texts, one file per identifier bundled under `docs/licenses`. */
+    @get:InputDirectory
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val licenseTexts: DirectoryProperty
+
+    /** Resolved artifacts, tracked as files so a rebuilt dependency re-runs the scan. */
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.NONE)
+    abstract val artifactFiles: ConfigurableFileCollection
+
+    /**
+     * Coordinates of components whose POM carries no SPDX identifier, mapped to the license text
+     * that covers them (an SPDX identifier, or a bundled name such as `BouncyCastle`/`CUP`). The
+     * build fails on any such component absent from this map and [unreproducedLicenses].
+     */
+    @get:Input
+    abstract val unmappedLicenses: MapProperty<String, String>
+
+    /** Coordinates whose terms are not reproduced here, mapped to a note on where they are. */
+    @get:Input
+    abstract val unreproducedLicenses: MapProperty<String, String>
+
+    /**
+     * Component coordinates to artifact paths, used only to attribute a NOTICE to its component
+     * at execution time. Not a task input: the artifact *content* is already tracked by
+     * [artifactFiles], and absolute paths would defeat build-cache relocatability.
+     */
+    @get:Internal
+    abstract val artifactsByCoordinates: MapProperty<String, String>
+
+    @get:OutputDirectory
+    abstract val outputDir: DirectoryProperty
+
+    @get:Internal
+    val componentsDocument: Provider<RegularFile>
+        get() = outputDir.file("runtime_dependencies.md")
+
+    @get:Internal
+    val licenseTextDocument: Provider<RegularFile>
+        get() = outputDir.file("runtime_dependency_licenses.txt")
+
+    @TaskAction
+    fun generate() {
+        val components = readComponents()
+        if (components.isEmpty()) {
+            throw GradleException(
+                "No components were read from the Licensee reports. The attribution document " +
+                    "would ship empty, which reads as 'this app redistributes nothing'.",
+            )
+        }
+        val notices = collectNotices()
+        val destination = outputDir.get().asFile.apply { mkdirs() }
+        destination.resolve("runtime_dependencies.md")
+            .writeText(renderComponents(components, notices.keys))
+        destination.resolve("runtime_dependency_licenses.txt")
+            .writeText(renderLicenseTexts(components, notices))
+    }
+
+    /** A component as Licensee resolved it, keyed by coordinates so variants can overlap. */
+    private data class Component(
+        val coordinates: String,
+        val name: String?,
+        /** The heading the component is grouped under: its primary license, or a fixed label. */
+        val heading: String,
+        val scmUrl: String?,
+        /** Every license identifier whose text must be bundled for this component. */
+        val licenseIdentifiers: List<String>,
+        /** For components not reproduced here, a note on where their terms live. */
+        val externalTermsNote: String?,
+    )
+
+    @Suppress("UNCHECKED_CAST")
+    private fun readComponents(): List<Component> {
+        val overrides = unmappedLicenses.get()
+        val external = unreproducedLicenses.get()
+        val slurper = JsonSlurper()
+        val components = mutableMapOf<String, Component>()
+        licenseeReports.files
+            .filter { it.isFile && it.name == "artifacts.json" }
+            .forEach { report ->
+                val entries = slurper.parse(report) as List<Map<String, Any?>>
+                entries.forEach { entry ->
+                    val coordinates = listOf("groupId", "artifactId", "version")
+                        .joinToString(":") { entry[it] as? String ?: "" }
+                    val spdx = (entry["spdxLicenses"] as? List<Map<String, Any?>>).orEmpty()
+                    // A component can declare more than one license (xml-apis is Apache-2.0 plus
+                    // two SAX public-domain grants). All of them are terms it ships under, so all
+                    // of their texts must be bundled; the first is only what it is grouped under.
+                    val declared = spdx.mapNotNull { it["identifier"] as? String }.distinct()
+                    val note = external[coordinates]
+                    // Fall back to the human-classified override only when the POM declared no
+                    // SPDX identifier; a component that is neither SPDX-declared nor classified is
+                    // a fault to surface, not to paper over with an "undeclared" placeholder.
+                    val identifiers = when {
+                        declared.isNotEmpty() -> declared
+                        overrides.containsKey(coordinates) -> listOf(overrides.getValue(coordinates))
+                        note != null -> emptyList()
+                        else -> throw GradleException(
+                            "$coordinates declares no SPDX license and is not classified. Add it " +
+                                "to unmappedLicenses (with the license whose text covers it) or " +
+                                "unreproducedLicenses in app/build.gradle.kts so it cannot ship " +
+                                "unattributed.",
+                        )
+                    }
+                    components[coordinates] = Component(
+                        coordinates = coordinates,
+                        name = entry["name"] as? String,
+                        heading = identifiers.firstOrNull() ?: EXTERNAL_TERMS_HEADING,
+                        scmUrl = (entry["scm"] as? Map<String, Any?>)?.get("url") as? String,
+                        licenseIdentifiers = identifiers,
+                        externalTermsNote = note,
+                    )
+                }
+            }
+        return components.values.sortedBy { it.coordinates }
+    }
+
+    /**
+     * Reads the NOTICE file out of each redistributed artifact that carries one, which is what
+     * Apache-2.0 section 4(d) obliges this project to pass on. Only the archive's own top level
+     * and `META-INF` are considered; a path deeper than that belongs to a bundled dependency and
+     * is that dependency's notice to reproduce, not ours. For an AAR the real payload lives in a
+     * nested `classes.jar`, so that jar's own `META-INF/NOTICE` is read as well.
+     */
+    private fun collectNotices(): Map<String, String> {
+        val byPath = artifactsByCoordinates.get().entries.associate { it.value to it.key }
+        return artifactFiles.files
+            .filter { it.isFile && (it.extension == "jar" || it.extension == "aar") }
+            .distinct()
+            .mapNotNull { archive ->
+                val notice = runCatching { noticeIn(archive) }.getOrElse { cause ->
+                    // A classpath entry that is not readable as an archive is a packaging
+                    // problem in its own right, but it must not silently drop attribution.
+                    throw GradleException("Could not read $archive while collecting notices", cause)
+                } ?: return@mapNotNull null
+                val coordinates = byPath[archive.path] ?: archive.name
+                coordinates to notice
+            }
+            .toMap()
+            .toSortedMap()
+    }
+
+    private fun noticeIn(archive: File): String? {
+        val notices = mutableListOf<String>()
+        ZipFile(archive).use { zip ->
+            zip.entries().toList()
+                .filter { entry -> NOTICE_ENTRY.matches(entry.name) }
+                .sortedBy { entry -> entry.name }
+                .forEach { entry ->
+                    zip.getInputStream(entry).use { it.noticeText() }?.let(notices::add)
+                }
+            if (archive.extension == "aar") {
+                zip.getEntry("classes.jar")?.let { entry ->
+                    zip.getInputStream(entry).use { notices += noticesInJar(it) }
+                }
+            }
+        }
+        return notices.joinToString("\n\n").takeIf { it.isNotEmpty() }
+    }
+
+    /** NOTICE entries inside a nested jar delivered as a stream (an AAR's `classes.jar`). */
+    private fun noticesInJar(stream: InputStream): List<String> {
+        val found = mutableListOf<Pair<String, String>>()
+        ZipInputStream(stream).use { zip ->
+            var entry = zip.nextEntry
+            while (entry != null) {
+                if (NOTICE_ENTRY.matches(entry.name)) {
+                    zip.noticeText()?.let { found += entry!!.name to it }
+                }
+                entry = zip.nextEntry
+            }
+        }
+        return found.sortedBy { it.first }.map { it.second }
+    }
+
+    private fun InputStream.noticeText(): String? =
+        String(readBytes(), Charsets.UTF_8).trim().takeIf { it.isNotEmpty() }
+
+    private fun renderComponents(
+        components: List<Component>,
+        noticed: Set<String>,
+    ): String = buildString {
+        appendLine("# Redistributed Components")
+        appendLine()
+        appendLine(
+            "The application, watch app, and watch faces are built from the components listed " +
+                "here, and the installed binaries contain them. This list is generated from the " +
+                "resolved release dependency graph of every module that ships an APK, so it " +
+                "describes the build you are running rather than a snapshot of some earlier one.",
+        )
+        appendLine()
+        appendLine(
+            "Source lineage -- protocol work this project studied, ported, or derived code from " +
+                "-- is a separate matter, recorded under Third-Party Licenses.",
+        )
+        appendLine()
+        appendLine(
+            "The full text of each license, and the notices upstream authors ask redistributors " +
+                "to pass on, follow this list.",
+        )
+        appendLine()
+        appendLine("Components: ${components.size}.")
+
+        components.groupBy { it.heading }
+            .toSortedMap()
+            .forEach { (heading, group) ->
+                appendLine()
+                appendLine("## $heading")
+                appendLine()
+                group.forEach { component ->
+                    val label = component.name?.takeIf { it.isNotBlank() && it != component.coordinates }
+                    val notice = if (component.coordinates in noticed) " -- carries a NOTICE" else ""
+                    appendLine("- `${component.coordinates}`${label?.let { " -- $it" }.orEmpty()}$notice")
+                    component.scmUrl?.takeIf { it.isNotBlank() }?.let { appendLine("  $it") }
+                    // A component licensed under more than one set of terms is grouped under the
+                    // first; name the others so a reader can find their text further down.
+                    component.licenseIdentifiers.drop(1).takeIf { it.isNotEmpty() }?.let {
+                        appendLine("  Also licensed under: ${it.joinToString(", ")}")
+                    }
+                    component.externalTermsNote?.let { appendLine("  Terms: $it") }
+                }
+            }
+    }
+
+    private fun renderLicenseTexts(
+        components: List<Component>,
+        notices: Map<String, String>,
+    ): String = buildString {
+        val identifiers = components.flatMap { it.licenseIdentifiers }.toSortedSet()
+        val available = licenseTexts.get().asFile.listFiles().orEmpty()
+            .filter { it.isFile && it.extension == "txt" }
+            .associateBy { it.nameWithoutExtension }
+
+        // A license with no text on disk would be listed in the component document and then
+        // silently omitted from the texts, which is the exact failure this ticket exists to fix.
+        // Fail the build and make someone add the text instead.
+        val missing = identifiers - available.keys
+        if (missing.isNotEmpty()) {
+            throw GradleException(
+                "No license text bundled for ${missing.joinToString(", ")}. Add the canonical " +
+                    "text to docs/licenses/<identifier>.txt so the components under it are not " +
+                    "shipped without their terms.",
+            )
+        }
+
+        appendLine("LICENSE TEXTS AND UPSTREAM NOTICES")
+        appendLine()
+        appendLine(
+            "The terms below cover the components in the redistributed-components list. A few " +
+                "components carry proprietary or externally-hosted terms that are not reproduced " +
+                "here; each is noted in that list with where its terms can be read.",
+        )
+
+        identifiers.forEach { identifier ->
+            appendLine()
+            appendLine(SEPARATOR)
+            appendLine(identifier)
+            appendLine(SEPARATOR)
+            appendLine()
+            appendLine(available.getValue(identifier).readText().trim())
+        }
+
+        if (notices.isNotEmpty()) {
+            appendLine()
+            appendLine(SEPARATOR)
+            appendLine("UPSTREAM NOTICES")
+            appendLine(SEPARATOR)
+            appendLine()
+            appendLine(
+                "Reproduced from the NOTICE file each of these components ships, as their " +
+                    "licenses require of anyone redistributing them.",
+            )
+            notices.forEach { (coordinates, notice) ->
+                appendLine()
+                appendLine("--- $coordinates ---")
+                appendLine()
+                appendLine(notice)
+            }
+        }
+    }
+
+    private companion object {
+        const val EXTERNAL_TERMS_HEADING = "License terms available elsewhere"
+        const val SEPARATOR = "================================================================"
+
+        /**
+         * A NOTICE at the archive root or in `META-INF`, with or without a text extension.
+         * Anchored so a path such as `META-INF/notices/other/NOTICE` is not mistaken for the
+         * archive's own notice.
+         */
+        val NOTICE_ENTRY = Regex("""(META-INF/)?NOTICE(\.(txt|md))?""", RegexOption.IGNORE_CASE)
     }
 }

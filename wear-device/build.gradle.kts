@@ -4,6 +4,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.hilt.android)
     alias(libs.plugins.ksp)
+    alias(libs.plugins.licensee)
 }
 
 android {
@@ -132,7 +133,18 @@ dependencies {
 
     // Watch Face Push API (Wear OS 6+)
     implementation(libs.wear.watchface.push)
-    implementation(libs.wear.watchface.validator)
+    // Exclude the EPL-1.0 XPath 2.0 processor this validator pulls in transitively: EPL-1.0 is
+    // incompatible with this app's GPL-3.0 license for a combined, distributed work. An
+    // instrumented test (WatchFaceValidatorTest) proves the validator still returns a token
+    // without it, so the WFF-push path is unaffected. If a future validator version genuinely
+    // needs it to parse the WFF, that test fails -- do not re-add the dependency without a
+    // license decision.
+    implementation(libs.wear.watchface.validator) {
+        exclude(
+            group = "com.rackspace.eclipse.webtools.sourceediting",
+            module = "org.eclipse.wst.xml.xpath2.processor",
+        )
+    }
 
     // Wearable Data Layer
     implementation(libs.play.services.wearable)
