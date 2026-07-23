@@ -64,8 +64,25 @@ jobs:
         with:
           keystore: debug
 
+      - name: Compute dev-channel run number
+        id: dev-run-number
+        run: |
+          # Offset added to github.run_number for this repo's dev-channel
+          # numbering (embedded in BuildConfig.DEV_BUILD_NUMBER via
+          # -PdevBuildNumber and in the dev-latest release asset filename that
+          # AppUpdateChecker.parseDevRunNumber reads back). This repo's own
+          # run counter restarted near 0 after the repo split, while the
+          # monorepo-built cohort already has dev.145 installed; the
+          # updater's strictly-greater comparison would otherwise report
+          # "up to date" forever and strand every migrated dev user (see
+          # docs/dev/parity-gate-runbook.md, P1.1). Remove this offset once
+          # this repo's native run_number has climbed past the highest
+          # monorepo-lineage dev number on its own.
+          DEV_RUN_NUMBER_OFFSET=500
+          echo "value=$(( ${{ github.run_number }} + DEV_RUN_NUMBER_OFFSET ))" >> "$GITHUB_OUTPUT"
+
       - name: Build debug APK
-        run: ./gradlew assembleDebug -PdevBuildNumber=${{ github.run_number }}
+        run: ./gradlew assembleDebug -PdevBuildNumber=${{ steps.dev-run-number.outputs.value }}
 
       - name: Extract version
         id: version
@@ -80,7 +97,7 @@ jobs:
       - name: Rename APKs
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          RUN="${{ github.run_number }}"
+          RUN="${{ steps.dev-run-number.outputs.value }}"
           PHONE_SRC="app/build/outputs/apk/debug/app-debug.apk"
           WEAR_SRC="wear-device/build/outputs/apk/debug/wear-device-debug.apk"
 
@@ -110,7 +127,7 @@ jobs:
           GH_TOKEN: ${{ steps.ci-token.outputs.token }}
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          RUN="${{ github.run_number }}"
+          RUN="${{ steps.dev-run-number.outputs.value }}"
           COMMIT="${{ github.sha }}"
           SHORT_SHA="${COMMIT:0:7}"
 
