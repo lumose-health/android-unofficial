@@ -5,6 +5,7 @@
     "security-testing",
     "dependency-updates",
     "release-and-promotion",
+    "parity-gate-runbook",
     "signing-and-secrets",
     "plugin-architecture",
     "wear-os-architecture"
