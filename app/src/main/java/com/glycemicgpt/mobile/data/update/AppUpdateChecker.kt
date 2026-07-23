@@ -215,9 +215,9 @@ class AppUpdateChecker @Inject constructor(
         // signed release and `dev-latest` pipelines this app polls. `internal`
         // (not `private`) so AppUpdateCheckerTest can assert the target repo.
         internal const val STABLE_RELEASES_URL =
-            "https://api.github.com/repos/GlycemicGPT/glycemicgpt-android-unofficial/releases/latest"
+            "https://api.github.com/repos/lumose-health/android-unofficial/releases/latest"
         internal const val DEV_RELEASES_URL =
-            "https://api.github.com/repos/GlycemicGPT/glycemicgpt-android-unofficial/releases/tags/dev-latest"
+            "https://api.github.com/repos/lumose-health/android-unofficial/releases/tags/dev-latest"
         private const val APK_SUBDIR = "apk_updates"
 
         private val ALLOWED_DOWNLOAD_HOSTS = setOf(
