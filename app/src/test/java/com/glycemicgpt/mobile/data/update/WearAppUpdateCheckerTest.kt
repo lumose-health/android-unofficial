@@ -20,14 +20,23 @@ class WearAppUpdateCheckerTest {
         assertTrue(WearAppUpdateChecker.DEV_RELEASES_URL.startsWith("https://api.github.com/"))
         assertTrue(
             WearAppUpdateChecker.STABLE_RELEASES_URL
-                .contains("/repos/GlycemicGPT/glycemicgpt-android-unofficial/"),
+                .contains("/repos/lumose-health/android-unofficial/"),
         )
         assertTrue(
             WearAppUpdateChecker.DEV_RELEASES_URL
-                .contains("/repos/GlycemicGPT/glycemicgpt-android-unofficial/"),
+                .contains("/repos/lumose-health/android-unofficial/"),
         )
+        // Never regress to a legacy owner/repo slug.
         assertFalse(WearAppUpdateChecker.STABLE_RELEASES_URL.contains("/GlycemicGPT/GlycemicGPT/"))
         assertFalse(WearAppUpdateChecker.DEV_RELEASES_URL.contains("/GlycemicGPT/GlycemicGPT/"))
+        assertFalse(
+            WearAppUpdateChecker.STABLE_RELEASES_URL
+                .contains("/GlycemicGPT/glycemicgpt-android-unofficial/"),
+        )
+        assertFalse(
+            WearAppUpdateChecker.DEV_RELEASES_URL
+                .contains("/GlycemicGPT/glycemicgpt-android-unofficial/"),
+        )
     }
 
     @Test
@@ -67,7 +76,7 @@ class WearAppUpdateCheckerTest {
     fun `isAllowedDownloadHost accepts github domains`() {
         assertTrue(
             AppUpdateChecker.isAllowedDownloadHost(
-                "https://github.com/GlycemicGPT/glycemicgpt-android-unofficial/releases/download/v1.0.0/test.apk",
+                "https://github.com/lumose-health/android-unofficial/releases/download/v1.0.0/test.apk",
             ),
         )
         assertTrue(
@@ -87,7 +96,7 @@ class WearAppUpdateCheckerTest {
     @Test
     fun `an https URL to an allowed host passes both wear download guards`() {
         val url =
-            "https://github.com/GlycemicGPT/glycemicgpt-android-unofficial/releases/download/v1.0/wear.apk"
+            "https://github.com/lumose-health/android-unofficial/releases/download/v1.0/wear.apk"
         assertTrue(AppUpdateChecker.isHttpsUrl(url))
         assertTrue(AppUpdateChecker.isAllowedDownloadHost(url))
     }

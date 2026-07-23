@@ -21,21 +21,29 @@ class AppUpdateCheckerTest {
         assertTrue(AppUpdateChecker.DEV_RELEASES_URL.startsWith("https://api.github.com/"))
         assertTrue(
             AppUpdateChecker.STABLE_RELEASES_URL
-                .contains("/repos/GlycemicGPT/glycemicgpt-android-unofficial/"),
+                .contains("/repos/lumose-health/android-unofficial/"),
         )
         assertTrue(
             AppUpdateChecker.DEV_RELEASES_URL
-                .contains("/repos/GlycemicGPT/glycemicgpt-android-unofficial/"),
+                .contains("/repos/lumose-health/android-unofficial/"),
         )
-        // Never regress to the monorepo owner/repo.
+        // Never regress to a legacy owner/repo slug.
         assertFalse(AppUpdateChecker.STABLE_RELEASES_URL.contains("/GlycemicGPT/GlycemicGPT/"))
         assertFalse(AppUpdateChecker.DEV_RELEASES_URL.contains("/GlycemicGPT/GlycemicGPT/"))
+        assertFalse(
+            AppUpdateChecker.STABLE_RELEASES_URL
+                .contains("/GlycemicGPT/glycemicgpt-android-unofficial/"),
+        )
+        assertFalse(
+            AppUpdateChecker.DEV_RELEASES_URL
+                .contains("/GlycemicGPT/glycemicgpt-android-unofficial/"),
+        )
     }
 
     private fun asset(name: String) = GitHubAsset(
         name = name,
         browserDownloadUrl =
-            "https://github.com/GlycemicGPT/glycemicgpt-android-unofficial/releases/download/v0.13.0/$name",
+            "https://github.com/lumose-health/android-unofficial/releases/download/v0.13.0/$name",
         size = 1L,
     )
 
@@ -274,7 +282,7 @@ class AppUpdateCheckerTest {
     @Test
     fun `an https URL to an allowed host passes both download guards`() {
         val url =
-            "https://github.com/GlycemicGPT/glycemicgpt-android-unofficial/releases/download/v1.0/app.apk"
+            "https://github.com/lumose-health/android-unofficial/releases/download/v1.0/app.apk"
         assertTrue(AppUpdateChecker.isHttpsUrl(url))
         assertTrue(AppUpdateChecker.isAllowedDownloadHost(url))
     }
