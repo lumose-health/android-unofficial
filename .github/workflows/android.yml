@@ -58,6 +58,9 @@ jobs:
               - 'README.md'
               - 'LICENSE'
               - 'docs/THIRD_PARTY_LICENSES.md'
+              # Canonical licence texts the runtime-attribution generator bundles into
+              # the APK; editing, emptying, or deleting one must re-run the drift gate.
+              - 'docs/licenses/**'
 
   build:
     name: Build & Test

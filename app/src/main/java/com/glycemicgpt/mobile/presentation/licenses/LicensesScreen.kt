@@ -37,11 +37,12 @@ import java.io.IOException
 
 /**
  * The app's in-product licensing and attribution surface: the project's own notice, the
- * third-party attributions, and the full GPL-3.0 text.
+ * third-party attributions, the components this build redistributes together with their licence
+ * texts and upstream notices, and the full GPL-3.0 text.
  *
- * The wording comes from repository documents bundled into the APK (see [LicenseDocuments]);
- * the screen states nothing of its own about how the project is licensed, and needs no
- * connectivity to show any of it. Display does normalise the markup around that wording:
+ * The wording comes from documents bundled into the APK (see [LicenseDocuments]); the screen
+ * states nothing of its own about how the project is licensed, and needs no connectivity to
+ * show any of it. Display does normalise the markup around that wording:
  * repository-relative links lose their targets ([stripUnresolvableLinks]), images are dropped
  * ([AppMarkdownText]), and the plain-text license is re-spaced into paragraphs.
  */
@@ -89,6 +90,20 @@ fun LicensesScreen(onBack: () -> Unit) {
                     item { HorizontalDivider() }
                     item { AppMarkdownText(current.thirdParty, linkifyMask = 0, isTextSelectable = true) }
                     item { HorizontalDivider() }
+                    // The redistributed-component list is generated, and long: one item per
+                    // licence family rather than one block for all of it.
+                    items(current.runtimeDependencySections) { section ->
+                        AppMarkdownText(section, linkifyMask = 0, isTextSelectable = true)
+                    }
+                    item { HorizontalDivider() }
+                    items(current.runtimeDependencyLicenseParagraphs) { paragraph ->
+                        Text(
+                            text = paragraph,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                    item { HorizontalDivider() }
                     // One item per paragraph rather than one 35 KB Text, so the list measures
                     // only the paragraphs on screen instead of all ~670 lines of the license.
                     items(current.fullLicenseParagraphs) { paragraph ->
@@ -112,6 +127,14 @@ private fun readLicenseDocuments(assets: AssetManager): LicensesUiState = try {
         thirdParty = stripUnresolvableLinks(
             LicenseDocuments.read(assets, LicenseDocuments.THIRD_PARTY),
         ),
+        runtimeDependencySections = splitIntoSections(
+            LicenseDocuments.read(assets, LicenseDocuments.RUNTIME_DEPENDENCIES),
+        ),
+        // Plain text for the same reason as the GPL below: these are licence texts, whose
+        // numbered clauses a markdown renderer reads as list markers.
+        runtimeDependencyLicenseParagraphs = LicenseDocuments
+            .read(assets, LicenseDocuments.RUNTIME_DEPENDENCY_LICENSES)
+            .split(PARAGRAPH_BREAK),
         // Plain text, not markdown: the GPL is not a markdown document, and a renderer would
         // read its indented lines as code blocks and its section numbers as list markers.
         fullLicenseParagraphs = LicenseDocuments
@@ -132,6 +155,8 @@ private sealed interface LicensesUiState {
     data class Loaded(
         val projectNotice: String,
         val thirdParty: String,
+        val runtimeDependencySections: List<String>,
+        val runtimeDependencyLicenseParagraphs: List<String>,
         val fullLicenseParagraphs: List<String>,
     ) : LicensesUiState
 }
