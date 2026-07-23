@@ -426,6 +426,12 @@ jobs:
           fi
 
       - name: Verify release signing certificate (phone + wear)
+        env:
+          # Routed through env: (not interpolated directly into the script)
+          # so the step-output values are never substituted into the shell
+          # source text, only into a shell variable.
+          PHONE_APK: ${{ steps.rename-apks.outputs.phone-apk-name }}
+          WEAR_APK: ${{ steps.rename-apks.outputs.wear-apk-name }}
         run: |
           set -euo pipefail
 
@@ -435,11 +441,15 @@ jobs:
           # the release-page WatchFace APKs. Only the phone and wear APKs are
           # asserted against the release signer.
           #
-          # Filenames come from the "Rename APKs with version" step's own
-          # outputs rather than being reconstructed here, so the two steps
-          # cannot silently drift apart on the naming convention.
-          PHONE_APK="${{ steps.rename-apks.outputs.phone-apk-name }}"
-          WEAR_APK="${{ steps.rename-apks.outputs.wear-apk-name }}"
+          # Both phone AND wear are required here -- unlike the rename step
+          # above, which treats a missing wear APK as a warning (wear-build
+          # keeps continue-on-error: true so its own step can report
+          # failure without blocking earlier diagnostics). The parity-gate
+          # runbook's global rule 4 (docs/dev/parity-gate-runbook.md) treats
+          # a wear-build failure at release time as gate-blocking regardless
+          # of continue-on-error, so this step intentionally hard-fails the
+          # job if the wear APK is missing rather than silently publishing
+          # phone-only.
 
           # Resolve apksigner from the highest installed build-tools version
           # (Android Gradle Plugin already requires build-tools on this
@@ -465,9 +475,16 @@ jobs:
               exit 1
             fi
 
+            # `|| true` on the extraction pipeline: an unmatched grep (or an
+            # apksigner failure that leaves no digest line to match) exits
+            # non-zero, which under pipefail would abort the script here via
+            # set -e before the friendlier ::error:: below ever runs. Any
+            # apksigner-side failure still surfaces -- its own stderr output
+            # is not captured by $(...) and prints directly to the job log --
+            # and an empty $sha256 is still caught and failed below either way.
             local sha256
             sha256=$("$APKSIGNER" verify --print-certs "$apk" \
-              | grep -i 'SHA-256 digest' | grep -oE '[0-9a-fA-F]{64}' | tr 'A-F' 'a-f' | head -1)
+              | grep -i 'SHA-256 digest' | grep -oE '[0-9a-fA-F]{64}' | tr 'A-F' 'a-f' | head -1 || true)
             if [ -z "$sha256" ]; then
               echo "::error::Could not extract a SHA-256 certificate digest from $label APK ($apk)"
               exit 1
