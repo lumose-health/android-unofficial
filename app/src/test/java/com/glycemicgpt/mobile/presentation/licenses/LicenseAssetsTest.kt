@@ -244,7 +244,6 @@ class LicenseAssetsTest {
             "Apache-2.0",
             "BSD-2-Clause",
             "BSD-3-Clause",
-            "EPL-1.0",
             "ICU",
             "MIT",
             "SAX-PD",

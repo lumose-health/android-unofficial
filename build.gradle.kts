@@ -42,23 +42,12 @@ subprojects {
             allow("SAX-PD")
             allow("SAX-PD-2.0")
 
-            // EPL-1.0 is deliberately NOT blanket-allowed: the FSF considers it incompatible
-            // with GPLv3 for a combined, distributed work, and this application is GPL-3.0-only.
-            // The single EPL-1.0 artifact below is a deep transitive of the alpha
-            // androidx.wear.watchface validator, pulled into the wear APK. It is allowed by
-            // coordinate, not by family, so a new EPL dependency fails the gate for a human to
-            // weigh. The GPL/EPL compatibility of this transitive is flagged for legal review
-            // before the first stable release; see the PR discussion.
-            allowDependency(
-                "com.rackspace.eclipse.webtools.sourceediting",
-                "org.eclipse.wst.xml.xpath2.processor",
-                "2.1.100",
-            ) {
-                because(
-                    "EPL-1.0 XPath 2.0 processor, a transitive of the alpha wear watchface " +
-                        "validator; GPL-3.0 compatibility flagged for legal review",
-                )
-            }
+            // EPL-1.0 is intentionally absent: the FSF considers it incompatible with GPLv3 for a
+            // combined, distributed work, and this application is GPL-3.0-only. The only EPL-1.0
+            // artifact that reached the graph (an XPath 2.0 processor transitive of the alpha wear
+            // watchface validator) is excluded at that dependency in wear-device/build.gradle.kts;
+            // WatchFaceValidatorTest proves the validator still works without it. A new EPL
+            // dependency therefore fails this gate rather than shipping in a GPL-3.0 binary.
 
             // GPL-3.0 is this project's own licence; javasake is an ecosystem library
             // published under it. Compatible by definition with a GPL-3.0-only app.
