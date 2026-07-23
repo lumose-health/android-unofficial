@@ -79,10 +79,10 @@ jobs:
           # this repo's native run_number has climbed past the highest
           # monorepo-lineage dev number on its own.
           DEV_RUN_NUMBER_OFFSET=500
-          echo "value=$(( ${{ github.run_number }} + DEV_RUN_NUMBER_OFFSET ))" >> "$GITHUB_OUTPUT"
+          echo "run_number=$(( GITHUB_RUN_NUMBER + DEV_RUN_NUMBER_OFFSET ))" >> "$GITHUB_OUTPUT"
 
       - name: Build debug APK
-        run: ./gradlew assembleDebug -PdevBuildNumber=${{ steps.dev-run-number.outputs.value }}
+        run: ./gradlew assembleDebug -PdevBuildNumber=${{ steps.dev-run-number.outputs.run_number }}
 
       - name: Extract version
         id: version
@@ -97,7 +97,7 @@ jobs:
       - name: Rename APKs
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          RUN="${{ steps.dev-run-number.outputs.value }}"
+          RUN="${{ steps.dev-run-number.outputs.run_number }}"
           PHONE_SRC="app/build/outputs/apk/debug/app-debug.apk"
           WEAR_SRC="wear-device/build/outputs/apk/debug/wear-device-debug.apk"
 
@@ -127,7 +127,7 @@ jobs:
           GH_TOKEN: ${{ steps.ci-token.outputs.token }}
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          RUN="${{ steps.dev-run-number.outputs.value }}"
+          RUN="${{ steps.dev-run-number.outputs.run_number }}"
           COMMIT="${{ github.sha }}"
           SHORT_SHA="${COMMIT:0:7}"
 
