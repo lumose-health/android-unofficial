@@ -114,6 +114,10 @@ exact in-place path with zero user risk.
 prior data intact. **FAIL:** any signature/downgrade error -- fix before scheduling the event.
 **Capture:** both APK filenames, `apksigner verify --print-certs` on each, before/after screenshots.
 
+Also **keep a pre-offset dev APK of this repository** (e.g. today's `dev.5`) on disk: `dev-latest`
+is a rolling tag, so once the run-offset PR lands it is replaced -- and Step 4.6 needs a
+pre-offset build as its dev-channel instrument.
+
 ### P1.5 Physical phone staged and seed rows recorded
 
 The AC1 device: a physical phone running the **v0.13.0 release build**, pump paired over BLE, with
@@ -136,11 +140,14 @@ but **verify rather than assume**.
 
 ### P1.7 Approvers enumerated and available
 
-Both release workflows gate on the `release-gated` environment, which pauses **each job** for a
-required-reviewer approval: Release Please → Auto-merge Release PR → (Fallback Patch Release, if
-taken) → Build & Upload Release APK. List who can approve, confirm at least one approver is
-available for the whole event window, and confirm everyone knows that **declining the APK-build
-approval is the last free abort** (Phase 3).
+Three workflows gate jobs on the `release-gated` environment, each pausing for a
+required-reviewer approval: `release.yml` (the release pipeline itself -- full approval topology
+in P3.2), `changelog-pr.yml`, and `sync-main-to-develop.yml`. (`dev-pre-release.yml` is
+**ungated** and publishes `dev-latest` on qualifying `develop` pushes -- another reason the
+develop freeze matters.) List who can approve, confirm at least one approver is available for the
+whole event window, and confirm everyone knows two rules from P3.2 in advance: **declining the
+APK-build approval is the last free abort**, and the changelog/sync approvals are **left pending
+until Phase 4 completes**.
 **PASS:** named approvers + availability posted. **Capture:** the list.
 
 ### P1.8 Version plan fixed in writing
@@ -177,8 +184,18 @@ chore: force first stable release version
 Release-As: 0.14.0
 ```
 
+GitHub's default squash message will not carry the footer by itself -- put it there explicitly,
+either by pasting the footer into the merge dialog's extended description or via:
+
+```bash
+gh pr merge <pr> --squash --subject "chore: force first stable release version" \
+  --body "Release-As: 0.14.0"
+```
+
 Verify after merge that the footer survived the squash: `git log -1 origin/develop` must show the
-`Release-As:` line. Without it, release-please computes its own (colliding) version.
+`Release-As:` line. Without it, release-please computes its own (colliding) version. If the footer
+is missing, the recovery is simply another PR whose squash commit carries it (release-please
+honors the latest `Release-As` in range; the freeze has not started yet).
 **PASS:** footer present on the `develop` head commit. **Capture:** the `git log -1` output.
 
 ### P2.2 Freeze both repositories
@@ -213,12 +230,21 @@ git rev-parse "$PIN:plugins/pump-driver-api" \
               "$PIN:app/src/release/assets/glycemicgpt-watchface-analogMechanical.apk"
 ```
 
-In the monorepo (pump-driver trees against its `develop` head; persistence/wear/WFF anchors against
-the **v0.13.0 tag**, the installed baseline):
+In the monorepo, first pin its side too -- monorepo `develop` is not frozen against merges (P2.2
+freezes only its develop→main promotion), and the pump-driver-equivalence claim in Step 4.5 is
+only coherent if the source-identity evidence and the unit suites use the **same** monorepo SHA:
 
 ```bash
-git rev-parse origin/develop:plugins/pump-driver-api \
-              origin/develop:plugins/shipped \
+git fetch origin
+MONO_PIN=$(git rev-parse origin/develop)
+```
+
+Then compare (pump-driver trees against `$MONO_PIN`; persistence/wear/WFF anchors against the
+**v0.13.0 tag**, the installed baseline):
+
+```bash
+git rev-parse "$MONO_PIN:plugins/pump-driver-api" \
+              "$MONO_PIN:plugins/shipped" \
               v0.13.0:apps/mobile/app/src/main/java/com/glycemicgpt/mobile/data/local \
               v0.13.0:apps/mobile/app/schemas \
               v0.13.0:apps/mobile/wear-device/src/main/AndroidManifest.xml \
@@ -230,7 +256,7 @@ git rev-parse origin/develop:plugins/pump-driver-api \
 re-pin at `$PIN` is the pump-driver-equivalence evidence artifact). **FAIL:** any mismatch -- stop
 and diff the trees (`git diff v0.13.0:<mono-path> $PIN:<path>`); the event does not proceed until
 the divergence is explained and either resolved or formally accepted.
-**Capture:** both command outputs, verbatim.
+**Capture:** `$MONO_PIN` and both command outputs, verbatim.
 
 ### P2.5 Capture green check-runs at the pin
 
@@ -256,20 +282,36 @@ Merge with **Create a merge commit** (preserves the develop→main ancestry; see
 
 ### P3.2 Walk the sequential release approvals
 
-The push to `main` starts `release.yml`. Each job pauses on the `release-gated` environment;
-approve them **in order, one at a time**, verifying each job's output before approving the next:
+The promotion push starts more than one gated workflow, and `release.yml` itself runs **twice**
+(once on the promotion push, again on the release-please squash push). The operator will therefore
+see gated approval prompts from **three workflows across two `release.yml` runs** -- approve only
+the release-pipeline ones, in order, verifying each job's output before approving the next:
 
-1. **Release Please** -- must propose the `Release-As` version from P2.1 (e.g. 0.14.0), not a
-   collision-range 0.13.x. Wrong version → do not approve; stop and diagnose.
-2. **Auto-merge Release PR** -- merges the release PR; the resulting push re-runs `release.yml`,
-   which creates the tag + GitHub Release.
-3. **Build & Upload Release APK** -- ⛔ **this approval is the last free abort.** Declining it
-   leaves a tag and a release with no APKs and **no installed user affected**. If anything above
-   looked wrong, decline here.
+**Run 1 (trigger: the promotion merge commit):**
 
-(The Fallback Patch Release path should **not** fire when the `Release-As` commit is present; if it
-does, stop -- the version plan has been bypassed.)
-**Capture:** the run URL and, per approval, the job output you verified before approving.
+1. **Release Please** -- must propose a release PR at the `Release-As` version from P2.1
+   (e.g. 0.14.0), not a collision-range 0.13.x. Wrong version → do not approve; stop and diagnose.
+2. **Auto-merge Release PR** -- squash-merges the release PR onto `main` as `chore: release X`.
+3. The **Fallback Patch Release** path must **not** fire when the `Release-As` commit is present;
+   if its approval prompt appears, stop -- the version plan has been bypassed.
+
+**Run 2 (trigger: the `chore: release X` push):**
+
+4. **Release Please** (again) -- **this approval is what mints the tag and the GitHub Release.**
+   Verify the run shows the expected tag before approving.
+5. **Build & Upload Release APK** -- ⛔ **this approval is the last free abort.** Declining it
+   leaves a tag and an asset-less release and **no installed user affected** (delete the
+   asset-less release per the abort ladder). If anything above looked wrong, decline here.
+
+**Leave pending -- do not approve until Phase 4 completes:**
+
+- **`changelog-pr.yml`** (fires on the promotion push) and **`sync-main-to-develop.yml`** (fires
+  on the release push). Approving the sync mid-event pushes the version-bump commit onto `develop`
+  **during the declared freeze** and re-triggers the ungated `dev-pre-release.yml`, publishing a
+  new `dev-latest` that changes the dev-channel expectation in Step 4.6. Both prompts wait
+  harmlessly; approve them after the gate PASSes.
+
+**Capture:** both run URLs and, per approval, the job output you verified before approving.
 
 ### P3.3 Post-publish verification block
 
@@ -281,11 +323,13 @@ TAG=v0.14.0   # the tag just published
 gh release download "$TAG" --repo lumose-health/android-unofficial -D "parity-$TAG"
 ```
 
-**V1 -- signing certificate (phone AND wear).**
+**V1 -- signing certificate (phone AND wear).** Name the files exactly -- a
+`GlycemicGPT-*-release.apk` glob also matches the Wear and WatchFace APKs:
 
 ```bash
-apksigner verify --print-certs "parity-$TAG"/GlycemicGPT-*-release.apk        # phone
-apksigner verify --print-certs "parity-$TAG"/GlycemicGPT-Wear-*-release.apk   # wear
+VER="${TAG#v}"
+apksigner verify --print-certs "parity-$TAG/GlycemicGPT-${VER}-release.apk"        # phone
+apksigner verify --print-certs "parity-$TAG/GlycemicGPT-Wear-${VER}-release.apk"   # wear
 ```
 
 Both SHA-256 digests must equal the release signer in the reference table
@@ -311,7 +355,7 @@ unfulfils the wear leg of the gate.
 **V3 -- version identity.**
 
 ```bash
-aapt dump badging "parity-$TAG"/GlycemicGPT-*-release.apk | head -1
+aapt dump badging "parity-$TAG/GlycemicGPT-${VER}-release.apk" | head -1
 ```
 
 `package: name` must be `com.glycemicgpt.mobile`; `versionCode` must be **> 130000** and equal the
@@ -324,8 +368,11 @@ planned value (e.g. `140000`); `versionName` must match the tag.
 
 In escalating order -- each rung is complete in itself; never skip down the ladder:
 
-1. **Before APKs exist:** decline the Build & Upload approval. Nothing shipped; fix on `develop`
-   (freeze lifted for the fix only) and restart from P2.1 with the next patch `Release-As`.
+1. **Before APKs exist:** decline the Build & Upload approval. No installed user is affected, but
+   the tag and an **asset-less release** already exist at this point (run 2 created them) --
+   delete the release (`gh release delete "$TAG"`, tag kept) so `releases/latest` never serves an
+   empty release, then fix on `develop` (freeze lifted for the fix only) and restart from P2.1
+   with the next patch `Release-As`.
 2. **After publish, verification failed:** `gh release delete <tag>` (⛔ **keep the tag** -- see
    the appendix for why deletion genuinely stops the bleed). Fix, then restart from P2.1. ⛔ The
    burned version number is never reused: the next attempt is a patch bump, because a re-released
@@ -342,7 +389,16 @@ Order is fixed. Each step assumes the previous PASSed.
 
 On the staged phone from P1.5 (v0.13.0, pump paired, seed rows recorded):
 
-1. Download the **phone** release APK onto the phone (browser or `adb push`).
+1. Put the **phone** release APK on the phone from the copy already verified in P3.3 -- never a
+   fresh browser download (the release page lists four similarly named assets, and the Wear APK
+   shares the phone app's `applicationId` and cert, so installing the wrong one would consume the
+   one-shot seeded upgrade). Then confirm the bytes on-device match the verified copy:
+
+   ```bash
+   adb push "parity-$TAG/GlycemicGPT-${VER}-release.apk" /sdcard/Download/
+   adb shell sha256sum "/sdcard/Download/GlycemicGPT-${VER}-release.apk"
+   sha256sum "parity-$TAG/GlycemicGPT-${VER}-release.apk"   # must match the line above
+   ```
 2. Enable **airplane mode**, then re-enable **Bluetooth only**. Airplane mode is the point of the
    test: with the network up, the app re-syncs and a wiped database refills itself -- the wipe
    self-masks, and `allowBackup="false"` means there is no backup artifact to autopsy afterwards.
@@ -374,12 +430,12 @@ migrating user passes through, since the phone always upgrades first.
    loss-vs-latency discriminator: a response inside the window proves the Data Layer round-trip; a
    timeout is a clean transport FAIL rather than an ambiguous hang.
 2. **Alert-dismiss round-trip.** Trigger an alert, dismiss it on the watch, and judge the result
-   **phone-side only**: the alert shows acknowledged in the phone UI, or the relay logs receipt
-   within ~10 s:
-
-   ```bash
-   adb logcat -s WearChatRelayService
-   ```
+   **phone-side only**: the alert must show **acknowledged in the phone UI within ~10 s**. That UI
+   state is the sole PASS instrument on a release build -- `WearChatRelayService`'s success-path
+   log lines are debug-level, and the release logging tree drops everything below WARN (and tags
+   what survives `GlycemicGPT`, not the class name), so an empty
+   `adb logcat -s WearChatRelayService` on a healthy round-trip is expected, not a FAIL. If you
+   watch logcat at all, use `adb logcat -s GlycemicGPT` and expect only *failure* lines to appear.
 
    ⚠️ The watch UI is a **false-pass instrument** for this test: `AlertsActivity` discards the send
    result and clears the alert locally unconditionally, so a dead transport still *looks* dismissed
@@ -387,7 +443,7 @@ migrating user passes through, since the phone always upgrades first.
 
 **PASS:** quick-query response within the timeout AND phone-side acknowledgment within ~10 s.
 **FAIL:** quick-query timeout, or no phone-side acknowledgment (regardless of what the watch shows).
-**Capture:** watch + phone screenshots, the logcat lines with timestamps.
+**Capture:** watch + phone screenshots with timestamps (logcat failure lines too, if any appeared).
 
 ### Step 4.3 -- Wear OTA push (the watch's only upgrade path)
 
@@ -412,11 +468,15 @@ The user-facing watchface artifacts are the **committed in-app WFF assets** deli
 
 1. **Byte-identity** -- already proven at P2.4 (the two WFF blob hashes match the monorepo v0.13.0
    tag). Re-run the two `git rev-parse` asset lines at the release tag and confirm they still match.
-2. **Signature** -- both committed assets must verify:
+2. **Signature** -- verify the blobs **as committed at the release tag**, not the working tree (a
+   locally regenerated asset would otherwise pass here while step 1 reads the tag -- two checks
+   silently examining different bytes):
 
    ```bash
-   apksigner verify app/src/release/assets/glycemicgpt-watchface-digitalFull.apk
-   apksigner verify app/src/release/assets/glycemicgpt-watchface-analogMechanical.apk
+   git show "$TAG:app/src/release/assets/glycemicgpt-watchface-digitalFull.apk" > /tmp/wff-d.apk
+   git show "$TAG:app/src/release/assets/glycemicgpt-watchface-analogMechanical.apk" > /tmp/wff-a.apk
+   apksigner verify /tmp/wff-d.apk
+   apksigner verify /tmp/wff-a.apk
    ```
 
 3. **Ambient string-fit** -- push each face to the **API-36** wear AVD (P1.2), enter ambient mode,
@@ -439,7 +499,10 @@ event day. Three parts, all required:
 2. **Toolchain identity** -- both repos already pin Gradle 8.12 / AGP 8.7.3 / Kotlin 2.1.0 /
    JDK 17 with identical lockfiles; the P2.4 tree hashes cover the module sources, and the green
    gates at `$PIN` cover the locked build.
-3. **Dual green unit suites** -- at the pinned SHAs, in **both** repositories:
+3. **Dual green unit suites** -- at the pinned SHAs, in **both** repositories. In this repo, run
+   at `$PIN` (the repo root is the Gradle root). In the monorepo, run at a checkout or worktree of
+   **`$MONO_PIN`** (captured in P2.4 -- not whatever `develop` has drifted to since), from its
+   mobile Gradle root `apps/mobile/`:
 
    ```bash
    ./gradlew testDebugUnitTest
@@ -455,20 +518,26 @@ this is the safety-critical leg and there is no accepted-residual path around it
 
 ### Step 4.6 -- Updater discovery from the new build (AC3)
 
-From the phone upgraded in Step 4.1 (airplane mode off now):
+The update channel is a **compile-time build-type field** (`BuildConfig.UPDATE_CHANNEL`: release
+builds are `stable`, debug builds are `dev` -- see `app/build.gradle.kts`); there is no runtime
+channel switch. Each channel is therefore verified from the build type that actually uses it:
 
-1. **Stable channel:** Settings → check for updates. It must reach this repository's
-   `releases/latest`, parse the new release, and report **up to date** at the just-installed
-   version -- proving URL, parse, and compare all work from the shipped binary.
-2. **Dev channel:** switch the updater to the dev channel and check. It must discover
-   `dev-latest` with the **offset** run numbering from P1.1 (a number that exceeds the installed
-   cohort's `dev.145` lineage).
+1. **Stable channel -- on the phone upgraded in Step 4.1** (airplane mode off now): Settings →
+   check for updates. It must reach this repository's `releases/latest`, parse the new release,
+   and report **up to date** at the just-installed version. "Up to date" is only reported after a
+   successful fetch + parse + asset match, so it proves URL, parse, and compare all work from the
+   shipped binary.
+2. **Dev channel -- on the P1.4 emulator**, with a **pre-offset** dev build of this repository
+   installed (its `dev.<n>` below the installed cohort's `dev.145` lineage): run its update check.
+   It must discover `dev-latest` at the **offset** run numbering from P1.1 and offer the upgrade
+   -- proving the dev channel is not stranded on "up to date" by the run-number cliff.
 
 **Explicitly out of scope:** discovery by monorepo-built installs. That is the bridging release's
 job (Phase 5 / GLY-94 AC2), not this gate's.
 
-**PASS:** both channels resolve and report the correct verdicts, no errors surfaced.
-**Capture:** screenshots of both check results.
+**PASS:** both checks resolve and report the correct verdicts, no errors surfaced.
+**Capture:** screenshots of both check results (emulator screenshot to include the installed
+dev version so the offset comparison is legible).
 
 ## Phase 5 -- Sign-off and the migration window
 
