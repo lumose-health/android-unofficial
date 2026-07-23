@@ -26,7 +26,7 @@
 
 > **IMPORTANT SAFETY WARNING**
 >
-> This software is **NOT** designed to replace your endocrinologist or healthcare provider. GlycemicGPT provides AI-generated suggestions only and should be used as a supplementary tool alongside professional medical care. The platform repo's [MEDICAL-DISCLAIMER.md](https://github.com/GlycemicGPT/GlycemicGPT/blob/main/MEDICAL-DISCLAIMER.md) applies to this codebase.
+> This software is **NOT** designed to replace your endocrinologist or healthcare provider. GlycemicGPT provides AI-generated suggestions only and should be used as a supplementary tool alongside professional medical care. Read [MEDICAL-DISCLAIMER.md](MEDICAL-DISCLAIMER.md) before installing.
 
 ---
 
@@ -90,11 +90,17 @@ We welcome contributions, especially new device data drivers -- please read [CON
 
 ## License
 
-This project is licensed under the **GNU General Public License v3.0 (GPL-3.0)**. See [LICENSE](LICENSE) for details. By contributing, you agree that your contributions will be licensed under the same terms.
+android-unofficial: Android and Wear OS monitoring app with Bluetooth pump-driver plugins for GlycemicGPT.
+
+Copyright (C) 2026 Josh Engelbrecht
+
+This project is licensed under the **GNU General Public License v3.0**, SPDX identifier `GPL-3.0-only` -- version 3 only, without the "or any later version" option. See [LICENSE](LICENSE) for the full text, and [docs/dev/spdx-header-policy.md](docs/dev/spdx-header-policy.md) for how that identifier is applied in source files. By contributing, you agree that your contributions will be licensed under the same terms.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
 
 ## Disclaimer
 
-> **USE AT YOUR OWN RISK.** This software is experimental, is not approved by the FDA or any regulatory body for medical use, and does not control any medical device. AI-generated suggestions can be wrong. Always verify insulin dosing, carb ratio, or correction factor suggestions with your healthcare team before acting on them. See the platform repo's [MEDICAL-DISCLAIMER.md](https://github.com/GlycemicGPT/GlycemicGPT/blob/main/MEDICAL-DISCLAIMER.md) for the complete terms.
+> **USE AT YOUR OWN RISK.** This software is experimental, is not approved by the FDA or any regulatory body for medical use, and does not control any medical device. AI-generated suggestions can be wrong. Always verify insulin dosing, carb ratio, or correction factor suggestions with your healthcare team before acting on them. See [MEDICAL-DISCLAIMER.md](MEDICAL-DISCLAIMER.md) for the complete terms, and [PRIVACY.md](PRIVACY.md) for what this app stores and where it sends it.
 
 ---
 
