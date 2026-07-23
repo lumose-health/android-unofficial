@@ -111,8 +111,9 @@ Every row must be checked off, with evidence posted, before an event date is set
 **Optional / non-gating:** the ambient string-fit check moved to the physical watch per the PM
 ruling on the tracking issue, so the API-36 AVD is a convenience for rehearsal, not gate evidence.
 
-The existing wear AVD is API 35; the watchface ambient check (Step 4.4) requires an **API 36**
-Wear OS AVD. Create it, boot it, and confirm it renders a watch face. Run every command from
+The existing wear AVD is API 35. An **API 36** Wear OS AVD is useful for rehearsing wear-side
+behaviour, but Step 4.4's ambient check runs on the **physical watch** and is itself non-gating, so
+nothing here blocks the gate. Create it, boot it, and confirm it renders a watch face. Run every command from
 inside `nix-shell` at the repository root -- `shell.nix` is what provides the system images, and
 the SDK it exports is the only one that has them.
 
@@ -152,6 +153,15 @@ added `android-wear-signed` to `systemImageTypes` -- the step is unverified on a
 
 ### P1.3 Phone↔wear emulator pairing rehearsed
 
+> ⛔ **DESCOPED -- blocked, unvalidated, and not required for the gate.** Emulator pairing is
+> blocked by the Play-Store-only companion app (root cause below) and has never been executed end
+> to end, so **no procedure in this section is validated**. Per the PM ruling on the tracking
+> issue, **AC2 runs on the physical phone + physical watch**, which is stronger evidence than
+> emulator pairing and avoids this entirely; and Step 4.4's ambient check is non-gating and also
+> runs on the physical watch. This section is retained only to document the blocker and to save
+> the next person the investigation. **Do not treat resolving it as a precondition for the
+> promotion event.**
+
 Pair the phone emulator with the wear AVD (Wear OS pairing flow) end to end once, so pairing
 mechanics are not being debugged on event day.
 
@@ -168,7 +178,8 @@ W/SettingsViewModel$checkWatchStatus: com.google.android.gms.common.api.ApiExcep
   API: Wearable.API is not available on this device. ... statusCode=API_UNAVAILABLE
 ```
 
-This is **gate-blocking for Step 4.4**, not merely a rehearsal inconvenience: `WatchFacePusher`
+This is why the AVD cannot receive a watch face at all (it is **not** gate-blocking -- Step 4.4's
+ambient check runs on the physical watch and is non-gating): `WatchFacePusher`
 delivers the WFF assets over `ChannelClient`/`CapabilityClient`/`NodeClient`, so with no Data
 Layer there is no way to get a watch face onto the AVD. Installing the committed WFF assets
 directly with `adb install` is **not** a workaround -- the APKs install, but the Watch Face Push
@@ -177,15 +188,20 @@ runtime refuses to activate them
 registered through `WatchFacePushManager.addWatchFace()` to occupy a
 `com.google.wear.watchface.runtime/.DeclarativeWatchFaceRuntime<N>` slot.
 
-Prerequisites to resolve **before the freeze**:
+Prerequisites that would have to be resolved to make this section executable (**not** required
+before the freeze -- see the descope banner above):
 
 1. Add `"google_apis_playstore"` to `systemImageTypes` in `shell.nix` and create the phone AVD
-   from that image.
+   from that image. The phone image must also be **API 30 (Android 11) or newer**, which the Wear
+   OS pairing assistant requires.
 2. Decide and record which **Google account** signs in on the emulators -- companion setup
    requires one, and that is a maintainer decision, not an event-day improvisation.
-3. Bridge the emulators before pairing: `adb -s <wear-serial> forward tcp:5601 tcp:5601`, then use
-   the companion app's "Pair with emulator" flow. (Note `adb pair` is the *wireless-debugging*
-   command and is unrelated to Wear pairing.)
+3. Bridge the emulators before pairing by forwarding port 5601 **on the phone device** (the
+   companion app runs there and is what needs to reach the bridge) -- e.g. `adb -s <phone-serial>
+   forward tcp:5601 tcp:5601` -- then use the companion app's "Pair with emulator" flow. Confirm
+   with `adb forward --list` before pairing. Forwarding on the *wear* serial is a common mistake
+   and leaves the companion app unable to reach the emulator. (Note `adb pair` is the
+   *wireless-debugging* command and is unrelated to Wear pairing.)
 
 Name the instrument in advance: `:wear-device` has **no launcher activity** (`monkey -c
 android.intent.category.LAUNCHER` returns "No activities found to run"), so "any wear feature
@@ -194,8 +210,10 @@ tap.
 
 **PASS:** paired; a Data Layer message crosses, evidenced phone-side. **Capture:** screenshot.
 
-*Rehearsed 2026-07-23: **BLOCKED** on the `google_apis` phone image, per the above. Re-run once
-prerequisites 1--3 are met; Step 4.4 cannot be executed until this passes.*
+*Rehearsed 2026-07-23: **BLOCKED** on the `google_apis` phone image, per the above -- and
+subsequently **descoped**. Step 4.4 does **not** depend on this: its gate evidence is asset
+byte-identity plus `apksigner`, and its ambient check is non-gating and runs on the physical
+watch. Nothing here gates the promotion event.*
 
 ### P1.4 Dev-channel upgrade rehearsal (free dress rehearsal of AC1 mechanics)
 
@@ -653,14 +671,20 @@ On the staged phone from P1.5 (v0.13.0, pump paired, seed rows recorded):
    stock Android; exit 0 means reachable, exit 1 means refused or unreachable). Together these
    close the re-sync false PASS this step exists to prevent.
 
-   All four must hold **before install**, and both reachability probes must be re-run (and still
-   fail) **immediately before row validation** in step 5. If any check shows a live network path, fix
-   it before installing; if a network was live at any point after install, the row validation is
-   void -- the run cannot distinguish surviving data from re-synced data.
+   All four must hold **before install**, and **all four must be re-run** (and still hold)
+   **immediately before opening the app** in step 5 -- the two *state* checks as well as the two
+   reachability probes. Re-running only the probes is not sufficient: if a network path became
+   available after step 3 and the app synchronised, then went away again, both negative probes
+   would still fail and the run would look isolated while the database had already been
+   repopulated -- the exact re-sync false PASS this step exists to prevent. Re-checking airplane
+   and Wi-Fi state narrows that window to the launch itself. If any check shows a live network
+   path, fix it before installing; if a network was live at any point after install, the row
+   validation is void -- the run cannot distinguish surviving data from re-synced data.
 4. Install over the top via the package installer. It must present as an **update** to the
    existing app.
-5. Open the app -- still isolated (re-run both reachability probes) -- and verify the **synthetic
-   marker rows** against the P1.5 comment.
+5. Re-run **all four isolation checks** (airplane state, Wi-Fi state, ping, `nc -z`) immediately
+   before launch, then open the app -- still isolated -- and verify the **synthetic marker rows**
+   against the P1.5 comment.
 
 **PASS (all of):**
 - installer offered "Update" and completed without error;
@@ -760,14 +784,23 @@ Confirm the pairing still holds before starting, not after the release is alread
    assets declare `versionCode 110000` / `versionName 0.11.0` internally; the parity claim is
    byte-identity with the v0.13.0 tag, not a version match with the app.)
 
-3. **Ambient string-fit** -- push each face to the **API-36** wear AVD (P1.2), enter ambient mode,
+3. **Ambient string-fit (NON-GATING UX check)** -- on the **physical watch**, enter ambient mode
    and confirm BG value, trend arrow, IoB, and time all render without truncation or overlap.
+
+   This is **not gate evidence and does not block the gate.** The WFF assets are byte-identical to
+   the v0.13.0 tag (step 1), so ambient rendering is identical *by construction* -- the same bytes
+   cannot render differently. The check is retained only to catch a pre-existing rendering problem
+   inherited from the monorepo. If the physical watch is unavailable, record it as not-run and
+   proceed; **missing API-36 AVD infrastructure never blocks this step** (see P1.2, optional /
+   non-gating).
 
 ⛔ **Do not regenerate the WFF assets for any reason during the event** (global rule 2). If a hash
 or signature check fails, that is a FAIL finding -- investigate; do not rebuild.
 
-**PASS:** hashes match, both `apksigner verifies`, ambient renders clean on both faces.
-**Capture:** command outputs + ambient screenshots of both faces.
+**PASS (gate evidence):** hashes match the v0.13.0 tag and both `apksigner verifies` with the WFF
+asset signer. The ambient check is recorded but does **not** affect PASS/FAIL.
+**Capture:** command outputs; ambient screenshots of both faces if the physical watch was used,
+otherwise record "ambient check not run -- non-gating".
 
 ### Step 4.5 -- Pump-driver equivalence (AC5, structural)
 
