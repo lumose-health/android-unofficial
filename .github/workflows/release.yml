@@ -328,6 +328,14 @@ jobs:
       # Signing material is resolved from 1Password at runtime by the composite
       # action below; this is the only signing-related secret in GitHub.
       OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.ANDROID_ACTIONS_SERVICE_ACCOUNT }}
+      # Single source of truth for the post-build cert assertion below. Value
+      # is the release signer's SHA-256 fingerprint from the parity-gate
+      # runbook's verified reference table (docs/dev/parity-gate-runbook.md).
+      # Both repos' release buildTypes silently fall back to debug signing
+      # when RELEASE_KEYSTORE_FILE is unset, so this assertion is what turns
+      # that silent fallback into a failed job instead of a debug-signed
+      # release reaching users.
+      RELEASE_SIGNER_SHA256: 55f0d0cdabf20b398ad30a0ce3e998e3192666e5c15e6d378b86e1c8de342990
 
     steps:
       - name: Resolve version info
@@ -413,6 +421,52 @@ jobs:
           else
             echo "::warning::Analog watchface APK not found."
           fi
+
+      - name: Verify release signing certificate (phone + wear)
+        run: |
+          set -euo pipefail
+
+          # WatchFace APKs are deliberately excluded here -- they are unsigned
+          # by long-standing pre-split behavior (see watchface/build.gradle.kts);
+          # the artifacts users receive are the committed in-app WFF assets, not
+          # the release-page WatchFace APKs. Only the phone and wear APKs are
+          # asserted against the release signer.
+          PHONE_APK="GlycemicGPT-${{ steps.version-info.outputs.version }}-release.apk"
+          WEAR_APK="GlycemicGPT-Wear-${{ steps.version-info.outputs.version }}-release.apk"
+
+          APKSIGNER=""
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [ -n "$SDK_ROOT" ] && [ -d "$SDK_ROOT/build-tools" ]; then
+            for dir in "$SDK_ROOT"/build-tools/*/; do
+              [ -x "${dir}apksigner" ] && APKSIGNER="${dir}apksigner"
+            done
+          fi
+          APKSIGNER="${APKSIGNER:-apksigner}"
+
+          verify_cert() {
+            local apk="$1" label="$2"
+            if [ ! -f "$apk" ]; then
+              echo "::error::$label APK not found at $apk -- cannot verify signing certificate"
+              exit 1
+            fi
+
+            local sha256
+            sha256=$("$APKSIGNER" verify --print-certs "$apk" \
+              | grep -i 'SHA-256 digest' | grep -oE '[0-9a-fA-F]{64}' | tr 'A-F' 'a-f' | head -1)
+            if [ -z "$sha256" ]; then
+              echo "::error::Could not extract a SHA-256 certificate digest from $label APK ($apk)"
+              exit 1
+            fi
+
+            if [ "$sha256" != "$RELEASE_SIGNER_SHA256" ]; then
+              echo "::error::$label signing certificate mismatch: got $sha256, expected $RELEASE_SIGNER_SHA256 (release keystore likely absent -- build fell back to debug signing)"
+              exit 1
+            fi
+            echo "$label signing certificate verified: $sha256"
+          }
+
+          verify_cert "$PHONE_APK" "Phone"
+          verify_cert "$WEAR_APK" "Wear"
 
       - name: Generate token for glycemicgpt-release
         id: release-token
