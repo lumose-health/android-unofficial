@@ -3,6 +3,7 @@ import java.util.zip.ZipFile
 
 plugins {
     alias(libs.plugins.android.application)
+    alias(libs.plugins.licensee)
 }
 
 android {

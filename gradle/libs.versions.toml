@@ -37,6 +37,7 @@ javasake = "0.2.0"
 sqlcipher = "4.13.0"
 sqlite = "2.6.2"
 compose-markdown = "0.5.8"
+licensee = "1.14.1"
 
 [libraries]
 # AndroidX Core
@@ -145,3 +146,4 @@ kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 hilt-android = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
+licensee = { id = "app.cash.licensee", version.ref = "licensee" }

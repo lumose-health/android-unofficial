@@ -1,5 +1,22 @@
 # Third-Party Licenses
 
+This document records **source lineage**: upstream projects whose protocol work this
+application studied, ported, or derived code from. Each entry below explains what was taken
+and states whether the project is used as a runtime dependency (most are not -- they are
+reverse-engineering references).
+
+It is not the place that enumerates the libraries the built APKs redistribute -- OkHttp, Room,
+the Compose and AndroidX stack, and the rest. That is a different obligation (reproducing the
+licences and notices of code that ships inside the binary), and answering it from a
+hand-maintained list would go stale on the next dependency bump. Those attributions are
+generated from the resolved dependency graph on every build and shown in the app's own
+**Open Source Licenses** screen (Settings), under *Redistributed Components*. See
+`app/build.gradle.kts` (`generateDependencyAttribution`). A component may appear in both places
+when it is both a runtime dependency and a lineage entry -- SQLCipher, for instance, is a
+runtime dependency whose licence is reproduced in full below because its integration is
+described here. Keep this document scoped to lineage; do not expand it into a
+runtime-dependency list.
+
 ## Tandem BLE Protocol Implementation
 
 The Bluetooth Low Energy protocol implementation in this application is informed
