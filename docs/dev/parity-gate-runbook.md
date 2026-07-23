@@ -72,6 +72,7 @@ cross-check, never the sole authority on the signer.
 |-------|----------|
 | Release signer SHA-256 | `55f0d0cdabf20b398ad30a0ce3e998e3192666e5c15e6d378b86e1c8de342990` |
 | Debug signer SHA-256 (shared, dev channel) | `b04eacc89b84f0a30ace14b6cd1b0cdb919f6688fe13a572ca0c3af6565ea311` |
+| Committed WFF asset signer SHA-256 (both faces; distinct from release and debug) | `b0feea86c355d08d9f9a7654246d97d7b3dafd6c52e51cee98bf90fd0b48d95d` |
 | `applicationId` (phone AND wear, both repos) | `com.glycemicgpt.mobile` |
 | versionCode formula | `major * 1_000_000 + minor * 10_000 + patch` (see `app/build.gradle.kts`) |
 | Installed stable baseline | v0.13.0 = versionCode **130000** (monorepo-built) |
@@ -108,24 +109,128 @@ Every row must be checked off, with evidence posted, before an event date is set
 ### P1.2 API-36 Wear AVD created
 
 The existing wear AVD is API 35; the watchface ambient check (Step 4.4) requires an **API 36**
-Wear OS AVD. Create it, boot it, and confirm it renders a watch face.
-**PASS:** AVD boots to a rendered watch face. **Capture:** `avdmanager list avd` output + screenshot.
+Wear OS AVD. Create it, boot it, and confirm it renders a watch face. Run every command from
+inside `nix-shell` at the repository root -- `shell.nix` is what provides the system images, and
+the SDK it exports is the only one that has them:
+
+```bash
+nix-shell --run '
+  avdmanager create avd -n wear_api36 \
+    -k "system-images;android-36;android-wear-signed;x86_64" \
+    -d wearos_small_round
+  emulator -avd wear_api36 -no-audio -gpu auto -no-snapshot-load &
+'
+```
+
+Two provisioning details that otherwise cost an hour of confusion:
+
+- The API-36 Wear package path is `android-wear-**signed**`, not `android-wear` (the API 34/35
+  images use the unsuffixed path). `sdkmanager --list_installed` is the authority; the created AVD
+  still reports `Tag/ABI: android-wear/x86_64`, because the image's `SystemImage.TagId` is
+  `android-wear` while its directory name is not.
+- The nix SDK ships command-line tools at `cmdline-tools/19.0/bin` with **no `latest` symlink**. A
+  bare `avdmanager`/`sdkmanager` on `$PATH` therefore resolves to a host SDK (e.g.
+  `~/Android/Sdk`) that has no system images, and reports the project's AVDs as
+  "could not be loaded / Missing system image". Always go through `nix-shell`.
+
+**PASS:** AVD boots to a rendered watch face (press Back after boot -- the first-boot tutorial and
+notification stream sit in front of it). **Capture:** `avdmanager list avd` output + screenshot.
+
+*Rehearsed 2026-07-23: PASS. `wear_api36` boots to Wear OS 6.0 / API 36 (`ro.build.version.sdk=36`,
+`ro.build.characteristics=emulator,nosdcard,watch`) and renders the stock Orbita face.*
 
 ### P1.3 Phone↔wear emulator pairing rehearsed
 
 Pair the phone emulator with the wear AVD (Wear OS pairing flow) end to end once, so pairing
 mechanics are not being debugged on event day.
-**PASS:** paired; a Data Layer message crosses (any wear feature works). **Capture:** screenshot.
+
+⚠️ **The phone AVD must be built from a `google_apis_playstore` system image.** Pairing runs
+through the **Wear OS by Google companion app**, which is only installable from the real Play
+Store. On a `google_apis` phone image (what `shell.nix` provisions today) `com.android.vending` is
+the v1.8 stub with no launcher activity, the companion app cannot be installed, and Google Play
+services refuses to start its Wearable module at all:
+
+```text
+I/Wear_Controller: Wearable module requires a companion app to be installed.
+I/WearableService: onCreate: Wearable Services not starting. Wear is not available on this device.
+W/SettingsViewModel$checkWatchStatus: com.google.android.gms.common.api.ApiException: 17:
+  API: Wearable.API is not available on this device. ... statusCode=API_UNAVAILABLE
+```
+
+This is **gate-blocking for Step 4.4**, not merely a rehearsal inconvenience: `WatchFacePusher`
+delivers the WFF assets over `ChannelClient`/`CapabilityClient`/`NodeClient`, so with no Data
+Layer there is no way to get a watch face onto the AVD. Installing the committed WFF assets
+directly with `adb install` is **not** a workaround -- the APKs install, but the Watch Face Push
+runtime refuses to activate them
+(`FavoriteOperationException: Watch face package is not installed`), because a face must be
+registered through `WatchFacePushManager.addWatchFace()` to occupy a
+`com.google.wear.watchface.runtime/.DeclarativeWatchFaceRuntime<N>` slot.
+
+Prerequisites to resolve **before the freeze**:
+
+1. Add `"google_apis_playstore"` to `systemImageTypes` in `shell.nix` and create the phone AVD
+   from that image.
+2. Decide and record which **Google account** signs in on the emulators -- companion setup
+   requires one, and that is a maintainer decision, not an event-day improvisation.
+3. Bridge the emulators before pairing: `adb -s <wear-serial> forward tcp:5601 tcp:5601`, then use
+   the companion app's "Pair with emulator" flow. (Note `adb pair` is the *wireless-debugging*
+   command and is unrelated to Wear pairing.)
+
+Name the instrument in advance: `:wear-device` has **no launcher activity** (`monkey -c
+android.intent.category.LAUNCHER` returns "No activities found to run"), so "any wear feature
+works" is judged from the **phone**, via Settings → **Check Watch Status**, or by a complication
+tap.
+
+**PASS:** paired; a Data Layer message crosses, evidenced phone-side. **Capture:** screenshot.
+
+*Rehearsed 2026-07-23: **BLOCKED** on the `google_apis` phone image, per the above. Re-run once
+prerequisites 1--3 are met; Step 4.4 cannot be executed until this passes.*
 
 ### P1.4 Dev-channel upgrade rehearsal (free dress rehearsal of AC1 mechanics)
 
-On the phone emulator: install the **monorepo-built** `dev.145` debug APK, use the app enough to
-create local data, then install this repository's dev build (post-offset numbering) **over the
-top**. Both are signed with the shared debug cert (`b04eacc8…`, table above), so this rehearses the
-exact in-place path with zero user risk.
-**PASS:** package installer treats it as an update (no uninstall, no cert error); app opens with
-prior data intact. **FAIL:** any signature/downgrade error -- fix before scheduling the event.
-**Capture:** both APK filenames, `apksigner verify --print-certs` on each, before/after screenshots.
+On the phone emulator: install the **monorepo-built** `dev.145` debug APK, log in and configure the
+app, then install this repository's dev build **over the top**. Both are signed with the shared
+debug cert (`b04eacc8…`, table above) and both carry `versionCode 130000` and applicationId
+`com.glycemicgpt.mobile.debug`, so this rehearses the exact in-place path with zero user risk.
+
+**Scope -- what an emulator can and cannot prove.** An emulator has no pump, and the local Room
+tables are written *only* by `PumpPollingOrchestrator` (BLE) and `NightscoutSyncEngine`; there is
+no in-app manual-entry path (see P1.5). So no pump rows can be created here, and this step does
+not rehearse marker-row survival -- that is Step 4.1's job on the staged phone. What it does prove
+is the install mechanic and the survival of the entire app private data directory, which is where
+the encrypted database, the Keystore-wrapped SQLCipher passphrase, and the auth tokens all live.
+Use a **file-hash instrument** rather than screenshots -- it is exact, and it covers files no
+screen surfaces:
+
+```bash
+P=com.glycemicgpt.mobile.debug
+HASHES="run-as $P sh -c 'for d in databases shared_prefs files no_backup; do
+  for f in \$d/*; do [ -f \"\$f\" ] && sha256sum \"\$f\"; done; done'"
+adb -s <phone-emu> shell "$HASHES" > pre-upgrade-datadir.sha256
+# ... install -r the other lineage's APK ...
+adb -s <phone-emu> shell "$HASHES" > post-upgrade-datadir.sha256
+diff -u pre-upgrade-datadir.sha256 post-upgrade-datadir.sha256   # must be empty
+```
+
+Also confirm `dumpsys package $P` shows an **unchanged `firstInstallTime`** with an advanced
+`lastUpdateTime` -- that, not the word "Success", is what distinguishes an in-place update from a
+reinstall.
+
+**PASS (all of):** install reports success with no signature or downgrade error; `firstInstallTime`
+unchanged; the data-directory hash diff is empty; the app opens **logged in** with its configured
+server URL and user-set preferences intact; no SQLCipher open failure in `logcat` (the database
+opening at all is the proof that the Keystore-wrapped passphrase survived).
+**FAIL:** any signature/downgrade error, any hash difference, a login screen, or a SQLCipher
+decryption failure -- fix before scheduling the event.
+**Capture:** both APK filenames, `apksigner verify --print-certs` and `aapt dump badging` on each,
+the two hash files and their diff, and the `dumpsys package` install-time lines.
+
+*Rehearsed 2026-07-23: **PASS**. Monorepo `dev.145` → this repo's `dev.5`, both cert
+`b04eacc8…311`, both `versionCode 130000` / `versionName 0.13.0-debug`. All 17 files in the data
+directory byte-identical across the upgrade (including `glycemicgpt_encrypted.db`,
+`db_passphrase_prefs.xml`, `auth_credentials.xml`); `firstInstallTime` unchanged; the app reopened
+authenticated with its server URL and user-set theme/unit preferences, under verified network
+isolation.*
 
 Also **keep a pre-offset dev APK of this repository** (e.g. today's `dev.5`) on disk: `dev-latest`
 is a rolling tag, so once the run-offset PR lands it is replaced -- and Step 4.6 needs a
@@ -135,15 +240,26 @@ pre-offset build as its dev-channel instrument.
 
 The AC1 device: a physical phone running the **v0.13.0 release build**, logged into the
 **dedicated test account**, pump paired over BLE, with at least one day of accumulated data.
-Before the event, seed it with **synthetic marker rows** -- manually entered values chosen to be
-in-range but distinctive (e.g. a manual bolus of an unusual-but-plausible size, a meal entry with
-a recognizable name, readings at memorable timestamps) -- and post the exact synthetic values,
+Before the event, seed it with **synthetic marker rows** chosen to be in-range but distinctive
+(e.g. a manual bolus of an unusual-but-plausible size, a temp basal at a memorable rate, readings
+at memorable timestamps) -- and post the exact synthetic values,
 the relevant row counts, and a SHA-256 of the canonical marker list on the tracking issue. These
 markers, not any organic history, are what Step 4.1 verifies; because they are synthetic, posting
 them verbatim is safe (see the privacy rule) and makes verification exact. An **unseeded** run
 self-masks a wipe: the app is designed to re-sync, and `allowBackup="false"` leaves no forensic
 trail -- so a wiped database can look full again minutes later and record a PASS on catastrophic
 data loss.
+
+⛔ **Markers must be produced on the pump, and must be Room-backed.** There is no manual-entry
+screen in the app: the local tables Step 4.1 reads (`bolus_events`, `cgm_readings`,
+`iob_readings`, `basal_readings`, `battery_readings`, `reservoir_readings`, `alerts`) are written
+only by `PumpPollingOrchestrator` over BLE and by `NightscoutSyncEngine`. So a marker is a
+distinctive action taken **on the pump itself**, then pulled over BLE and confirmed visible in the
+app *before* the event. Do **not** use a meal entry as a marker: meals are server-side, not in the
+local database, so under the Step 4.1 airplane-mode isolation a meal marker may fail to render
+even on a completely healthy upgrade -- a false FAIL that would send a good run to the abort
+ladder.
+
 **PASS:** phone staged on the test account; synthetic-marker comment posted. **Capture:** the
 marker comment (exact values + counts + hash) and a Settings version screenshot showing 0.13.0,
 redacted of account identifiers.
@@ -500,11 +616,23 @@ On the staged phone from P1.5 (v0.13.0, pump paired, seed rows recorded):
 
    ```bash
    adb shell settings get global airplane_mode_on   # must print 1
-   adb shell settings get global wifi_on            # must print 0
+   adb shell cmd wifi status | head -1              # must print "Wifi is disabled"
    adb shell ping -c 1 -W 2 8.8.8.8                 # must FAIL (network unreachable)
+   adb shell ping -c 1 -W 2 <server-host>           # must FAIL -- the app's OWN backend
    ```
 
-   All three must hold **before install**, and the ping must be re-run (and still fail)
+   ⚠️ Do **not** assert `settings get global wifi_on == 0`: `wifi_on` is not a boolean. Measured
+   on API 35 -- Wi-Fi enabled prints `1`; airplane mode with Wi-Fi off prints **`3`** (the state
+   that restores Wi-Fi when airplane mode is lifted), never `0`. Asserting `0` fails a correctly
+   isolated device and sends a healthy run to the abort ladder. `cmd wifi status` is the
+   unambiguous instrument.
+
+   ⚠️ The `8.8.8.8` ping alone is **not sufficient**. The app supports a self-hosted server on a
+   LAN address over plain HTTP, so a surviving LAN path (or a VPN) can leave the backend fully
+   reachable while the public-internet ping fails -- producing exactly the re-sync false PASS this
+   step exists to prevent. Ping the host from Settings → "Connected to" as well.
+
+   All four must hold **before install**, and both pings must be re-run (and still fail)
    **immediately before row validation** in step 5. If any check shows a live network path, fix
    it before installing; if a network was live at any point after install, the row validation is
    void -- the run cannot distinguish surviving data from re-synced data.
@@ -588,6 +716,10 @@ cohort's watches ever upgrade, so it is verified here.
 The user-facing watchface artifacts are the **committed in-app WFF assets** delivered by
 `WatchFacePusher` -- not the unsigned release-page WatchFace APKs.
 
+⛔ **Requires P1.3 to have PASSed.** Part 3 pushes over the Data Layer, so a phone emulator that
+cannot reach the AVD makes this step unexecutable; there is no `adb install` fallback (see P1.3).
+Confirm the pairing still holds before starting, not after the release is already published.
+
 1. **Byte-identity** -- already proven at P2.4 (the two WFF blob hashes match the monorepo v0.13.0
    tag). Re-run the two `git rev-parse` asset lines at the release tag and confirm they still match.
 2. **Signature** -- verify the blobs **as committed at the release tag**, not the working tree (a
@@ -597,9 +729,15 @@ The user-facing watchface artifacts are the **committed in-app WFF assets** deli
    ```bash
    git show "$TAG:app/src/release/assets/glycemicgpt-watchface-digitalFull.apk" > /tmp/wff-d.apk
    git show "$TAG:app/src/release/assets/glycemicgpt-watchface-analogMechanical.apk" > /tmp/wff-a.apk
-   apksigner verify /tmp/wff-d.apk
-   apksigner verify /tmp/wff-a.apk
+   apksigner verify --print-certs /tmp/wff-d.apk
+   apksigner verify --print-certs /tmp/wff-a.apk
    ```
+
+   Both must verify **and** print the WFF asset signer from the reference table
+   (`b0feea86…d95d`) -- a third certificate, neither the release signer nor the debug signer,
+   because Watch Face Push packages are signed independently of the app. (For orientation, these
+   assets declare `versionCode 110000` / `versionName 0.11.0` internally; the parity claim is
+   byte-identity with the v0.13.0 tag, not a version match with the app.)
 
 3. **Ambient string-fit** -- push each face to the **API-36** wear AVD (P1.2), enter ambient mode,
    and confirm BG value, trend arrow, IoB, and time all render without truncation or overlap.
@@ -683,9 +821,18 @@ channel switch. Each channel is therefore verified from the build type that actu
 **Explicitly out of scope:** discovery by monorepo-built installs. That is the bridging release's
 job (Phase 5 / GLY-94 AC2), not this gate's.
 
+⚠️ **The installed dev run number is not visible anywhere on screen.** Settings → About shows only
+`Version 0.13.0-debug` / `Build debug`, and the APK manifest agrees -- every dev build carries
+`versionName 0.13.0-debug` and `versionCode 130000`; the `-dev.<n>` string exists only in the
+release **asset filename**. The comparison the updater actually performs is
+`parseDevRunNumber(<remote asset filename>) > BuildConfig.DEV_BUILD_NUMBER`, and
+`DEV_BUILD_NUMBER` is compiled in from `-PdevBuildNumber` and never surfaced in the UI. So record
+the installed build's provenance from the **APK filename you installed** (keep the file), not from
+a Settings screenshot.
+
 **PASS:** both checks resolve and report the correct verdicts, no errors surfaced.
-**Capture:** screenshots of both check results (emulator screenshot to include the installed
-dev version so the offset comparison is legible).
+**Capture:** screenshots of both check results, plus the exact filename and `sha256sum` of the
+pre-offset dev APK installed on the emulator, so the offset comparison is legible.
 
 ## Phase 5 -- Sign-off and the migration window
 
