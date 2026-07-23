@@ -104,11 +104,15 @@ Note that the three in-scope globs under `plugins/` name `pump-driver-api`,
 `example`, and `shipped/tandem` individually, so `plugins/shipped/medtronic/` is
 skipped by construction -- see below.
 
-## Excluded trees -- never stamp
+## Never stamp the GPL header here
 
 Some code here is derived from upstream projects that carry their own copyright and
 license terms. Adding a GlycemicGPT copyright header to a file whose provenance is
 upstream overstates authorship: it is an attribution defect, not housekeeping.
+
+"Not the GPL header" does not always mean "no header". One file in this section --
+`EcJpake.kt` -- must receive an **Apache-2.0** header instead. Read that subsection
+before treating this whole section as a skip list.
 
 The list below is normative. **A pull request that adds an upstream-derived file must
 add it to this list in the same pull request.** If a file is not listed and you are
@@ -149,7 +153,7 @@ Full attribution record:
 [`docs/THIRD_PARTY_LICENSES.md`](../THIRD_PARTY_LICENSES.md#medtronic-minimed-ble-protocol-implementation-openminimed),
 which is authoritative if it and this policy disagree.
 
-### The Particle-derived EC-JPAKE implementation
+### The Particle-derived EC-JPAKE implementation (Apache-2.0, stamp required)
 
 ```text
 plugins/shipped/tandem/src/main/java/com/glycemicgpt/mobile/ble/crypto/EcJpake.kt
@@ -203,36 +207,46 @@ an identifier line. Do not add one.
 
 ## Verifying a sweep
 
-All five must hold when the sweep is done. Set `SWEEP_BASE` and `SWEEP_HEAD` to the
-revisions the sweep itself spans -- the last check compares that range, not the
-branch, so unrelated commits touching `LICENSE` do not produce a false failure.
+All six must hold when the sweep is done. Set `SWEEP_BASE` and `SWEEP_HEAD` to the
+revisions the sweep itself spans, so unrelated commits are not attributed to it.
 
-Every GPL-scoped Kotlin file carries the header. `EcJpake.kt` is excluded from this
-command on purpose: it is in-tree but Apache-2.0, and is checked separately below.
-Must print nothing:
+Judge these checks by their **output**, not their exit status: `grep -L` and `grep -l`
+exit non-zero when nothing matches, which is the passing case here. Each command below
+ends in `|| true` so a passing check does not abort a `set -e` script.
+
+Every GPL-scoped Kotlin file carries the header. `EcJpake.kt` is filtered out on
+purpose: it is in-tree but Apache-2.0, and is checked separately below. Must print
+nothing:
 
 ```sh
 grep -rL 'SPDX-License-Identifier: GPL-3.0-only' \
   --include='*.kt' \
   app/src wear-device/src watchface/src \
   plugins/pump-driver-api/src plugins/example/src plugins/shipped/tandem/src \
-  | grep -v 'ble/crypto/EcJpake.kt'
+  | grep -v 'ble/crypto/EcJpake.kt' || true
 ```
 
-Every in-scope non-Kotlin file carries the header too -- Gradle Kotlin DSL, shell
-scripts, and workflows, minus the excluded spike tree (must print nothing):
+Every in-scope non-Kotlin file carries the header too. The Gradle files are listed
+explicitly rather than globbed, so the excluded medtronic and spike build files are
+never selected (must print nothing):
 
 ```sh
 grep -L 'SPDX-License-Identifier: GPL-3.0-only' $(
-  git ls-files '*.gradle.kts' 'scripts/*.sh' '.github/workflows/*.yml' \
-    ':!:tools/medtronic-ble-spike/**'
-)
+  git ls-files \
+    'build.gradle.kts' 'settings.gradle.kts' \
+    'app/build.gradle.kts' 'wear-device/build.gradle.kts' \
+    'watchface/build.gradle.kts' \
+    'plugins/pump-driver-api/build.gradle.kts' \
+    'plugins/example/build.gradle.kts' \
+    'plugins/shipped/tandem/build.gradle.kts' \
+    'scripts/*.sh' '.github/workflows/*.yml'
+) || true
 ```
 
 No excluded tree was stamped (must print nothing):
 
 ```sh
-grep -rl 'GPL-3.0-only' plugins/shipped/medtronic tools/medtronic-ble-spike
+grep -rl 'GPL-3.0-only' plugins/shipped/medtronic tools/medtronic-ble-spike || true
 ```
 
 `EcJpake.kt` carries the Apache-2.0 header, not the GPL one (must print
@@ -243,9 +257,16 @@ grep -o 'SPDX-License-Identifier: [A-Za-z0-9.-]*' \
   plugins/shipped/tandem/src/main/java/com/glycemicgpt/mobile/ble/crypto/EcJpake.kt
 ```
 
-The sweep left `LICENSE` alone, so GitHub still detects exactly one license for this
-repository (must print nothing):
+The sweep did not touch `LICENSE` (must print nothing):
 
 ```sh
 git diff --name-only "$SWEEP_BASE".."$SWEEP_HEAD" -- LICENSE
+```
+
+That check only proves the sweep left the file alone. Confirm license detection
+itself separately -- it must report exactly one license, `GPL-3.0`:
+
+```sh
+gh api "repos/lumose-health/android-unofficial/license?ref=$SWEEP_HEAD" \
+  --jq '{spdx: .license.spdx_id, path: .path}'
 ```

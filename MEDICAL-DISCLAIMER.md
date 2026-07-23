@@ -1,6 +1,6 @@
 # Medical Disclaimer
 
-This is the disclaimer of record for `android-unofficial`: the GlycemicGPT Android phone app, the Wear OS watch face and companion, and the Bluetooth device data driver plugins (Tandem, Medtronic). The [platform repository's disclaimer](https://github.com/lumose-health/GlycemicGPT/blob/main/MEDICAL-DISCLAIMER.md) is the disclaimer of record for the backend API, web dashboard, and AI sidecar; where the two conflict on a point they both address, the platform disclaimer wins.
+This is the disclaimer of record for `android-unofficial`: the GlycemicGPT Android phone app, the Wear OS watch face and companion, and the Bluetooth device data driver plugins (Tandem, Medtronic). The [platform repository's disclaimer](https://github.com/lumose-health/GlycemicGPT/blob/main/MEDICAL-DISCLAIMER.md) is the disclaimer of record for the backend API, web dashboard, and AI sidecar. Each governs its own components. Nothing in the platform disclaimer relaxes the device-level limits stated here: where a statement about this app, its drivers, or its handling of a pump or CGM appears in both, the stricter of the two applies.
 
 ## Regulatory Status
 
@@ -107,7 +107,7 @@ THIS INCLUDES BUT IS NOT LIMITED TO ANY DAMAGES, INJURIES, OR ADVERSE HEALTH OUT
 
 ## License Warranty Disclaimer
 
-This software is licensed under the GNU General Public License v3.0 (GPL-3.0). Per Sections 15-17 of the GPL-3.0:
+This software is licensed under the GNU General Public License v3.0, SPDX identifier `GPL-3.0-only`. Per Sections 15-17 of the GPL-3.0:
 
 - **Section 15:** THERE IS NO WARRANTY FOR THE PROGRAM, TO THE EXTENT PERMITTED BY APPLICABLE LAW. THE ENTIRE RISK AS TO THE QUALITY AND PERFORMANCE OF THE PROGRAM IS WITH YOU.
 - **Section 16:** IN NO EVENT UNLESS REQUIRED BY APPLICABLE LAW OR AGREED TO IN WRITING WILL ANY COPYRIGHT HOLDER, OR ANY OTHER PARTY WHO MODIFIES AND/OR CONVEYS THE PROGRAM AS PERMITTED ABOVE, BE LIABLE TO YOU FOR DAMAGES.

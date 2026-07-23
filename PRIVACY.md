@@ -8,7 +8,7 @@ Your data -- glucose readings, insulin and pump data, alerts, settings, credenti
 
 On the phone, glucose and insulin data is held in an encrypted Room database, and tokens and credentials in `EncryptedSharedPreferences`. The watch keeps a small rolling cache of the values its watch face renders -- recent glucose, trend, and insulin on board -- in app-private storage so the face survives a restart. It stores no credentials, and the watch app requests no internet permission.
 
-The app collects no telemetry, and no build the project distributes transmits your data to the project or to any third party. The outbound connections a running app makes are the ones you choose:
+The app collects no telemetry, and no build the project distributes sends your health data or any usage analytics to the project. The outbound connections a running app makes are the ones you choose, and each is listed below. Two of them necessarily involve a third party -- Google Play Services carries phone-to-watch messages, and GitHub serves update checks and downloads -- so those services see the ordinary connection and request metadata any network call produces. Neither receives your health data.
 
 - **Your pump**, over Bluetooth Low Energy, directly and locally.
 - **Your backend**, if you configure one -- the self-hosted GlycemicGPT instance you point the app at, for AI analysis, alerting, and long-term storage. With no backend configured, the app still runs local BLE monitoring, on-device storage, and local threshold alerts, and makes no network calls for them.
