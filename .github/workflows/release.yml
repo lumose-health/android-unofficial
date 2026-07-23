@@ -383,6 +383,7 @@ jobs:
         run: ./gradlew :watchface:assembleRelease
 
       - name: Rename APKs with version
+        id: rename-apks
         run: |
           VERSION="${{ steps.version-info.outputs.version }}"
 
@@ -391,6 +392,7 @@ jobs:
           if [ -n "$APP_APK" ]; then
             cp "$APP_APK" "GlycemicGPT-${VERSION}-release.apk"
             echo "Phone APK: GlycemicGPT-${VERSION}-release.apk"
+            echo "phone-apk-name=GlycemicGPT-${VERSION}-release.apk" >> "$GITHUB_OUTPUT"
           else
             echo "::error::Phone APK not found"
             exit 1
@@ -401,6 +403,7 @@ jobs:
           if [ -n "$WEAR_APK" ]; then
             cp "$WEAR_APK" "GlycemicGPT-Wear-${VERSION}-release.apk"
             echo "Wear APK: GlycemicGPT-Wear-${VERSION}-release.apk"
+            echo "wear-apk-name=GlycemicGPT-Wear-${VERSION}-release.apk" >> "$GITHUB_OUTPUT"
           else
             echo "::warning::Wear APK not found. Phone APK will still be uploaded."
           fi
@@ -431,22 +434,34 @@ jobs:
           # the artifacts users receive are the committed in-app WFF assets, not
           # the release-page WatchFace APKs. Only the phone and wear APKs are
           # asserted against the release signer.
-          PHONE_APK="GlycemicGPT-${{ steps.version-info.outputs.version }}-release.apk"
-          WEAR_APK="GlycemicGPT-Wear-${{ steps.version-info.outputs.version }}-release.apk"
+          #
+          # Filenames come from the "Rename APKs with version" step's own
+          # outputs rather than being reconstructed here, so the two steps
+          # cannot silently drift apart on the naming convention.
+          PHONE_APK="${{ steps.rename-apks.outputs.phone-apk-name }}"
+          WEAR_APK="${{ steps.rename-apks.outputs.wear-apk-name }}"
 
+          # Resolve apksigner from the highest installed build-tools version
+          # (Android Gradle Plugin already requires build-tools on this
+          # runner to build the APKs above; apksigner's cert-verification
+          # behavior does not vary across recent versions, but picking the
+          # highest keeps this deterministic rather than relying on
+          # filesystem glob order).
           APKSIGNER=""
           SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
           if [ -n "$SDK_ROOT" ] && [ -d "$SDK_ROOT/build-tools" ]; then
-            for dir in "$SDK_ROOT"/build-tools/*/; do
-              [ -x "${dir}apksigner" ] && APKSIGNER="${dir}apksigner"
-            done
+            LATEST_BUILD_TOOLS=$(find "$SDK_ROOT/build-tools" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' \
+              | sort -V | tail -1)
+            if [ -n "$LATEST_BUILD_TOOLS" ] && [ -x "$SDK_ROOT/build-tools/$LATEST_BUILD_TOOLS/apksigner" ]; then
+              APKSIGNER="$SDK_ROOT/build-tools/$LATEST_BUILD_TOOLS/apksigner"
+            fi
           fi
           APKSIGNER="${APKSIGNER:-apksigner}"
 
           verify_cert() {
             local apk="$1" label="$2"
-            if [ ! -f "$apk" ]; then
-              echo "::error::$label APK not found at $apk -- cannot verify signing certificate"
+            if [ -z "$apk" ] || [ ! -f "$apk" ]; then
+              echo "::error::$label APK not found (path: '$apk') -- cannot verify signing certificate"
               exit 1
             fi
 
