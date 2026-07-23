@@ -75,9 +75,18 @@ jobs:
           # monorepo-built cohort already has dev.145 installed; the
           # updater's strictly-greater comparison would otherwise report
           # "up to date" forever and strand every migrated dev user (see
-          # docs/dev/parity-gate-runbook.md, P1.1). Remove this offset once
-          # this repo's native run_number has climbed past the highest
-          # monorepo-lineage dev number on its own.
+          # docs/dev/parity-gate-runbook.md, P1.1).
+          #
+          # This offset is PERMANENT -- do not delete it once the native
+          # run_number passes 145. While it is applied every published
+          # number is native+500, so the native counter can never catch up
+          # to what has already shipped: at native 146 the published number
+          # is 646. Deleting the offset would then publish 146 to devices
+          # holding DEV_BUILD_NUMBER=646, and the updater's strictly-greater
+          # comparison would strand them permanently -- recreating the exact
+          # bug this offset exists to fix. Retiring it at all requires a
+          # deliberate staged migration that keeps every newly published
+          # number above the highest one ever emitted.
           DEV_RUN_NUMBER_OFFSET=500
           echo "run_number=$(( GITHUB_RUN_NUMBER + DEV_RUN_NUMBER_OFFSET ))" >> "$GITHUB_OUTPUT"
 
