@@ -34,6 +34,27 @@ class LicenseAssetsTest {
     /** Repo-root-relative: Gradle runs unit tests with the module directory as the working dir. */
     private fun repoFile(path: String) = File("../$path").readText()
 
+    /**
+     * Parses the license-text asset into identifier -> body. Each section is a separator line, the
+     * identifier, a separator line, then the text up to the next separator, so splitting on the
+     * separator yields the preamble followed by alternating identifier/body tokens.
+     */
+    private fun licenseBodies(texts: String): Map<String, String> {
+        val tokens = texts.split(Regex("\\n={10,}\\n")).map { it.trim() }
+        return (1 until tokens.size step 2).associate { i ->
+            tokens[i] to tokens.getOrElse(i + 1) { "" }
+        }
+    }
+
+    /** The lines of a single component's entry in the component list, heading excluded. */
+    private fun componentEntry(components: String, coordinates: String): String {
+        val lines = components.lines()
+        val start = lines.indexOfFirst { it.startsWith("- `$coordinates") }
+        assertTrue("Component $coordinates is not in the list", start >= 0)
+        val rest = lines.drop(start + 1).takeWhile { !it.startsWith("- ") && !it.startsWith("## ") }
+        return (listOf(lines[start]) + rest).joinToString("\n")
+    }
+
     @Test
     fun `full license asset is the repository LICENSE verbatim`() {
         assertEquals(repoFile("LICENSE"), asset(LicenseDocuments.FULL_LICENSE))
@@ -125,39 +146,52 @@ class LicenseAssetsTest {
         val components = asset(LicenseDocuments.RUNTIME_DEPENDENCIES)
         val texts = asset(LicenseDocuments.RUNTIME_DEPENDENCY_LICENSES)
         assertTrue(components.contains("org.bouncycastle:bcprov-jdk18on"))
-        assertTrue("BouncyCastle license text is not bundled", texts.contains("\nBouncyCastle\n"))
+        assertTrue("BouncyCastle license text is empty", licenseBodies(texts)["BouncyCastle"].orEmpty().length > 200)
         assertTrue(components.contains("edu.princeton.cup:java-cup"))
-        assertTrue("CUP license text is not bundled", texts.contains("\nCUP\n"))
+        assertTrue("CUP license text is empty", licenseBodies(texts)["CUP"].orEmpty().length > 200)
+        // A specific external-terms component, not just the group heading: its own entry must
+        // carry the note, so the heading cannot be present for some other component while this
+        // one is unannotated.
+        val playServices = componentEntry(components, "com.google.android.gms:play-services-base")
         assertTrue(
-            "Play services should be noted as externally-licensed, not dropped",
-            components.contains("License terms available elsewhere"),
+            "play-services-base is not noted as externally-licensed",
+            playServices.contains("Terms: Android Software Development Kit License"),
         )
     }
 
     /**
-     * Every SPDX licence a redistributed component declares must have its full text in the text
-     * asset. A component shipped under a licence whose text was never bundled is exactly the
-     * section 4(a) gap this attribution exists to close, and it would be invisible on the screen.
-     *
-     * The generator itself fails the build when an SPDX identifier has no bundled text, so this
-     * keeps the expectation visible in the suite and pins that each identifier's own delimited
-     * section is present rather than merely mentioned somewhere.
+     * Every license family a redistributed component is grouped under must resolve to a real,
+     * non-empty text section (or be a known non-SPDX/external category), and every SPDX family
+     * this project bundles a text for must be present. A component shipped under a license whose
+     * text was never bundled -- or bundled empty -- is exactly the section 4(a) gap this
+     * attribution exists to close, and it would be invisible on the screen.
      */
     @Test
-    fun `every SPDX licence a component declares has its text bundled`() {
+    fun `every licence family in the component list resolves to real bundled text`() {
         val texts = asset(LicenseDocuments.RUNTIME_DEPENDENCY_LICENSES)
+        val bodies = licenseBodies(texts)
+
+        // Each SPDX family this project bundles a text for is present with a substantive body.
         SPDX_FAMILIES_WITH_TEXT.forEach { identifier ->
-            assertTrue("No licence text bundled for $identifier", texts.contains("\n$identifier\n"))
+            val body = bodies[identifier]
+            assertTrue("No license text section for $identifier", body != null)
+            assertTrue("License text for $identifier is empty or truncated", body!!.length > 200)
         }
-        // The families that head the component list are the primary licence of each component;
-        // every SPDX one among them is part of the set whose text is asserted above.
+
+        // Every heading in the component list is an expected category: an SPDX family with text,
+        // a known non-SPDX license bundled by name, or the external-terms group. A new, unbundled
+        // family (say MPL-2.0) would surface here rather than pass silently.
         val headingFamilies = asset(LicenseDocuments.RUNTIME_DEPENDENCIES)
             .lines()
             .filter { it.startsWith("## ") }
             .map { it.removePrefix("## ").trim() }
-        assertTrue("No licence families were found in the component list", headingFamilies.isNotEmpty())
+            .toSet()
+        assertTrue("No license families were found in the component list", headingFamilies.isNotEmpty())
+        val unexpected = headingFamilies - SPDX_FAMILIES_WITH_TEXT - NON_SPDX_HEADINGS
+        assertTrue("Unexpected license family with no bundled text: $unexpected", unexpected.isEmpty())
+        // Every SPDX-family heading resolves to a non-empty text section.
         headingFamilies.filter { it in SPDX_FAMILIES_WITH_TEXT }.forEach { family ->
-            assertTrue("Component grouped under $family but its text is absent", texts.contains("\n$family\n"))
+            assertTrue("Component grouped under $family but its text is empty", bodies[family].orEmpty().length > 200)
         }
     }
 
@@ -215,6 +249,17 @@ class LicenseAssetsTest {
             "MIT",
             "SAX-PD",
             "SAX-PD-2.0",
+        )
+
+        /**
+         * Component-list headings that are not SPDX families: licenses bundled by name because
+         * their POM declares no SPDX identifier, and the group for components whose terms are
+         * noted rather than reproduced (proprietary SDKs, and licenses reproduced elsewhere).
+         */
+        val NON_SPDX_HEADINGS = setOf(
+            "BouncyCastle",
+            "CUP",
+            "License terms available elsewhere",
         )
     }
 }

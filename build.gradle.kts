@@ -1,5 +1,6 @@
 // Top-level build file for GlycemicGPT Android app
 import app.cash.licensee.LicenseeExtension
+import app.cash.licensee.UnusedAction
 
 plugins {
     alias(libs.plugins.android.application) apply false
@@ -27,14 +28,37 @@ plugins {
 subprojects {
     plugins.withId("app.cash.licensee") {
         extensions.configure<LicenseeExtension> {
+            // This is one policy shared by three modules with different dependency graphs, so
+            // most entries are legitimately unused in any single module (a wear-only dependency
+            // is "unused" when :app is checked). Ignore unused entries rather than emit a warning
+            // per entry per module; a stale entry is a minor maintenance cost, not a build signal.
+            unusedAction(UnusedAction.IGNORE)
+
             allow("Apache-2.0")
             allow("MIT")
             allow("BSD-2-Clause")
             allow("BSD-3-Clause")
-            allow("EPL-1.0")
             allow("ICU")
             allow("SAX-PD")
             allow("SAX-PD-2.0")
+
+            // EPL-1.0 is deliberately NOT blanket-allowed: the FSF considers it incompatible
+            // with GPLv3 for a combined, distributed work, and this application is GPL-3.0-only.
+            // The single EPL-1.0 artifact below is a deep transitive of the alpha
+            // androidx.wear.watchface validator, pulled into the wear APK. It is allowed by
+            // coordinate, not by family, so a new EPL dependency fails the gate for a human to
+            // weigh. The GPL/EPL compatibility of this transitive is flagged for legal review
+            // before the first stable release; see the PR discussion.
+            allowDependency(
+                "com.rackspace.eclipse.webtools.sourceediting",
+                "org.eclipse.wst.xml.xpath2.processor",
+                "2.1.100",
+            ) {
+                because(
+                    "EPL-1.0 XPath 2.0 processor, a transitive of the alpha wear watchface " +
+                        "validator; GPL-3.0 compatibility flagged for legal review",
+                )
+            }
 
             // GPL-3.0 is this project's own licence; javasake is an ecosystem library
             // published under it. Compatible by definition with a GPL-3.0-only app.
