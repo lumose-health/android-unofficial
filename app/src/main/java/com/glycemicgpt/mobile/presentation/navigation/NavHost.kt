@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Fastfood
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
@@ -60,6 +61,7 @@ import com.glycemicgpt.mobile.presentation.chat.AiChatScreen
 import com.glycemicgpt.mobile.data.remote.UrlSecurityPolicy
 import com.glycemicgpt.mobile.presentation.common.InsecureHttpBanner
 import com.glycemicgpt.mobile.presentation.home.HomeScreen
+import com.glycemicgpt.mobile.presentation.licenses.LicensesScreen
 import com.glycemicgpt.mobile.presentation.meal.CommonFoodsScreen
 import com.glycemicgpt.mobile.presentation.meal.MealHistoryScreen
 import com.glycemicgpt.mobile.presentation.meal.MealLogScreen
@@ -93,6 +95,7 @@ sealed class Screen(val route: String, val label: String, val icon: ImageVector)
     data object MealLog : Screen("meal_log", "Log a Meal", Icons.Default.Restaurant)
     data object MealHistory : Screen("meal_history", "Meal History", Icons.Default.History)
     data object CommonFoods : Screen("common_foods", "Common Foods", Icons.Default.Fastfood)
+    data object Licenses : Screen("licenses", "Open Source Licenses", Icons.Default.Description)
 }
 
 /**
@@ -139,7 +142,7 @@ internal fun sessionBannerMessage(state: AuthState, backendConfigured: Boolean):
 }
 
 // Routes that show their own TopAppBar + back button; bottom nav is hidden on these.
-private val spokeRoutes = setOf(
+internal val spokeRoutes = setOf(
     Screen.ChartDetail.route,
     Screen.TirDetail.route,
     Screen.InsulinDetail.route,
@@ -151,6 +154,7 @@ private val spokeRoutes = setOf(
     Screen.MealLog.route,
     Screen.MealHistory.route,
     Screen.CommonFoods.route,
+    Screen.Licenses.route,
 )
 
 @Composable
@@ -314,7 +318,11 @@ fun GlycemicGptNavHost(appSettingsStore: AppSettingsStore, authTokenStore: AuthT
                             null
                         },
                         onNavigateToMealLog = { navController.navigate(Screen.MealLog.route) },
+                        onNavigateToLicenses = { navController.navigate(Screen.Licenses.route) },
                     )
+                }
+                composable(Screen.Licenses.route) {
+                    LicensesScreen(onBack = { navController.popBackStack() })
                 }
                 backendGatedComposable(Screen.MealLog.route, navController, backendConfiguredState) {
                     MealLogScreen(

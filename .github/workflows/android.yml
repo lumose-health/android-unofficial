@@ -53,6 +53,11 @@ jobs:
               - 'build.gradle.kts'
               - 'gradle.properties'
               - '.github/workflows/android.yml'
+              # Compiled into the APK as assets and gated by LicenseAssetsTest, so a
+              # change to one of these is an app change even though it is a document.
+              - 'README.md'
+              - 'LICENSE'
+              - 'docs/THIRD_PARTY_LICENSES.md'
 
   build:
     name: Build & Test

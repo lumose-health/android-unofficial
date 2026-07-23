@@ -11,6 +11,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -40,6 +41,7 @@ import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Watch
 import androidx.compose.material3.AlertDialog
@@ -96,6 +98,7 @@ fun SettingsScreen(
     onNavigateToPairing: () -> Unit = {},
     onNavigateToBleDebug: (() -> Unit)? = null,
     onNavigateToMealLog: () -> Unit = {},
+    onNavigateToLicenses: () -> Unit = {},
     settingsViewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val state by settingsViewModel.uiState.collectAsState()
@@ -296,6 +299,7 @@ fun SettingsScreen(
             onDownloadUpdate = { url, size -> settingsViewModel.downloadAndInstallUpdate(url, size) },
             onGetInstallIntent = settingsViewModel::getInstallIntent,
             onDismissUpdate = settingsViewModel::dismissUpdateState,
+            onNavigateToLicenses = onNavigateToLicenses,
         )
 
         // -- Debug Section (debug builds only) --
@@ -1744,12 +1748,13 @@ private fun SoundPickerRow(
 }
 
 @Composable
-private fun AboutSection(
+internal fun AboutSection(
     state: SettingsUiState,
     onCheckForUpdate: () -> Unit,
     onDownloadUpdate: (String, Long) -> Unit,
     onGetInstallIntent: (File) -> android.content.Intent,
     onDismissUpdate: () -> Unit,
+    onNavigateToLicenses: () -> Unit,
 ) {
     val context = LocalContext.current
 
@@ -1781,11 +1786,24 @@ private fun AboutSection(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            Text(
-                text = "Open Source Licenses",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.primary,
-            )
+            TextButton(
+                onClick = onNavigateToLicenses,
+                contentPadding = PaddingValues(vertical = 8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("open_source_licenses_button"),
+            ) {
+                Text(
+                    text = "Open Source Licenses",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
 
