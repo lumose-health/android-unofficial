@@ -204,13 +204,19 @@ screen surfaces:
 
 ```bash
 P=com.glycemicgpt.mobile.debug
-HASHES="run-as $P sh -c 'for d in databases shared_prefs files no_backup; do
-  for f in \$d/*; do [ -f \"\$f\" ] && sha256sum \"\$f\"; done; done'"
+# Whole private tree, recursively, in a stable order. cache/ and code_cache/ are
+# the only exclusions -- they are rebuilt by the runtime and legitimately differ.
+HASHES="run-as $P sh -c 'find . -type f ! -path ./cache/\* ! -path ./code_cache/\* \
+  | LC_ALL=C sort | while read f; do sha256sum \"\$f\"; done'"
 adb -s <phone-emu> shell "$HASHES" > pre-upgrade-datadir.sha256
 # ... install -r the other lineage's APK ...
 adb -s <phone-emu> shell "$HASHES" > post-upgrade-datadir.sha256
 diff -u pre-upgrade-datadir.sha256 post-upgrade-datadir.sha256   # must be empty
 ```
+
+Hash the tree from its root rather than a fixed list of subdirectories: a wipe that spared
+`databases/` but dropped a nested `datastore/` file would otherwise pass unnoticed, and the file
+set grows as the app does.
 
 Also confirm `dumpsys package $P` shows an **unchanged `firstInstallTime`** with an advanced
 `lastUpdateTime` -- that, not the word "Success", is what distinguishes an in-place update from a
@@ -615,10 +621,10 @@ On the staged phone from P1.5 (v0.13.0, pump paired, seed rows recorded):
    cellular data path, or VPN produces exactly the false PASS this step exists to prevent:
 
    ```bash
-   adb shell settings get global airplane_mode_on   # must print 1
-   adb shell cmd wifi status | head -1              # must print "Wifi is disabled"
-   adb shell ping -c 1 -W 2 8.8.8.8                 # must FAIL (network unreachable)
-   adb shell ping -c 1 -W 2 <server-host>           # must FAIL -- the app's OWN backend
+   adb shell settings get global airplane_mode_on      # must print 1
+   adb shell cmd wifi status | head -1                 # must print "Wifi is disabled"
+   adb shell ping -c 1 -W 2 8.8.8.8                    # must FAIL (network unreachable)
+   adb shell nc -z -w 2 <server-host> <server-port>    # must FAIL (exit 1) -- the app's OWN backend
    ```
 
    ⚠️ Do **not** assert `settings get global wifi_on == 0`: `wifi_on` is not a boolean. Measured
@@ -627,13 +633,17 @@ On the staged phone from P1.5 (v0.13.0, pump paired, seed rows recorded):
    isolated device and sends a healthy run to the abort ladder. `cmd wifi status` is the
    unambiguous instrument.
 
-   ⚠️ The `8.8.8.8` ping alone is **not sufficient**. The app supports a self-hosted server on a
-   LAN address over plain HTTP, so a surviving LAN path (or a VPN) can leave the backend fully
-   reachable while the public-internet ping fails -- producing exactly the re-sync false PASS this
-   step exists to prevent. Ping the host from Settings → "Connected to" as well.
+   ⚠️ The `8.8.8.8` ping alone is **not sufficient**, in two independent ways. The app supports a
+   self-hosted server on a LAN address over plain HTTP, so a surviving LAN path (or a VPN) can
+   leave the backend fully reachable while the public-internet ping fails. And ICMP is not what
+   the app speaks: a network that drops ping while still routing TCP would pass a ping-only check.
+   Probe the **exact host and port** the app is configured for -- take them from Settings →
+   "Connected to" -- with `nc -z`, which tests the real TCP path (`/system/bin/nc` is present on
+   stock Android; exit 0 means reachable, exit 1 means refused or unreachable). Together these
+   close the re-sync false PASS this step exists to prevent.
 
-   All four must hold **before install**, and both pings must be re-run (and still fail)
-   **immediately before row validation** in step 5. If any check shows a live network path, fix
+   All four must hold **before install**, and both reachability probes must be re-run (and still
+   fail) **immediately before row validation** in step 5. If any check shows a live network path, fix
    it before installing; if a network was live at any point after install, the row validation is
    void -- the run cannot distinguish surviving data from re-synced data.
 4. Install over the top via the package installer. It must present as an **update** to the
