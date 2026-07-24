@@ -5,7 +5,6 @@
     "security-testing",
     "dependency-updates",
     "release-and-promotion",
-    "parity-gate-runbook",
     "signing-and-secrets",
     "spdx-header-policy",
     "plugin-architecture",

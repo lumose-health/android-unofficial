@@ -5,7 +5,7 @@ description: Why the Android contract guard is a Retrofit/Moshi smoke test plus 
 
 # ADR 0003: Contract-drift detection strategy
 
-**Status:** Accepted · **Context:** GLY-92
+**Status:** Accepted · **Context:** cross-repo API contract discipline (pre-split)
 
 ## Context
 
