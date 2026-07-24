@@ -5,7 +5,7 @@ description: Decision to leave the backend endpoint-versioning scheme as-is, and
 
 # ADR 0001: API versioning posture and app-compatibility signal
 
-**Status:** Accepted · **Context:** GLY-92 (cross-repo contract discipline, pre-split)
+**Status:** Accepted · **Context:** cross-repo API contract discipline (pre-split)
 
 ## Context
 

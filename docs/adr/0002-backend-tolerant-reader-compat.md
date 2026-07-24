@@ -5,7 +5,7 @@ description: Records the backend's existing tolerant-reader behavior as the mech
 
 # ADR 0002: Backend tolerant reader as the cross-cadence compatibility mechanism
 
-**Status:** Accepted · **Context:** GLY-92
+**Status:** Accepted · **Context:** cross-repo API contract discipline (pre-split)
 
 ## Context
 

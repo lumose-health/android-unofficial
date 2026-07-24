@@ -5,7 +5,7 @@ description: Single phone-app-plus-watch-services architecture for Wear OS integ
 
 # Wear OS Architecture
 
-> Committed: 2026-03-09 | Status: Active | Supersedes: Epic 32 original plan
+> Committed: 2026-03-09 | Status: Active | Supersedes: the original wear-companion-app plan
 
 ## Design Decision
 
@@ -194,7 +194,7 @@ GlycemicGPT is distributed via GitHub Releases (not Play Store -- open source di
 
 - Phone APK and watch APK are published as GitHub Release assets
 - Users sideload the phone APK or install via F-Droid (future)
-- Watch APK must be installed separately on the watch via ADB or a helper app (Epic 32 future story)
+- Watch APK must be installed separately on the watch via ADB or a helper app (a planned future enhancement)
 - Watch face is pushed programmatically by the phone app via Watch Face Push API
 
 ## API Level Requirements
