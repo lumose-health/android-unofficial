@@ -1,0 +1,97 @@
+{
+  "scopes": [
+    {
+      "name": "Mobile",
+      "emoji": "📱",
+      "labels": ["mobile", "component: mobile"],
+      "hasSubCategories": true
+    },
+    {
+      "name": "Wear OS",
+      "emoji": "⌚",
+      "labels": ["wear"],
+      "hasSubCategories": true
+    },
+    {
+      "name": "Watch Face",
+      "emoji": "🎨",
+      "labels": ["watchface"],
+      "hasSubCategories": true
+    },
+    {
+      "name": "Plugins",
+      "emoji": "🔌",
+      "labels": ["plugin", "plugins"],
+      "hasSubCategories": true
+    },
+    {
+      "name": "Security",
+      "emoji": "🔒",
+      "labels": ["security"],
+      "hasSubCategories": true
+    },
+    {
+      "name": "CI & Build",
+      "emoji": "🏗️",
+      "labels": ["ci", "build", "chore"],
+      "hasSubCategories": true
+    },
+    {
+      "name": "Documentation",
+      "emoji": "📚",
+      "labels": ["docs", "documentation"],
+      "hasSubCategories": false
+    },
+    {
+      "name": "Dependencies",
+      "emoji": "📦",
+      "labels": ["dependencies"],
+      "hasSubCategories": false
+    },
+    {
+      "name": "Uncategorized",
+      "emoji": "❓",
+      "labels": ["needs triage"],
+      "hasSubCategories": false
+    }
+  ],
+  "subCategories": [
+    {
+      "name": "Breaking Changes",
+      "emoji": "💥",
+      "labels": ["breaking-change"],
+      "priority": 0
+    },
+    {
+      "name": "New Features",
+      "emoji": "✨",
+      "labels": ["feature", "enhancement"],
+      "priority": 1
+    },
+    {
+      "name": "Bug Fixes",
+      "emoji": "🐛",
+      "labels": ["bugfix", "bug"],
+      "priority": 2
+    },
+    {
+      "name": "Performance",
+      "emoji": "⚡",
+      "labels": ["performance"],
+      "priority": 3
+    },
+    {
+      "name": "Refactor",
+      "emoji": "🔧",
+      "labels": ["refactor"],
+      "priority": 4
+    }
+  ],
+  "defaultSubCategory": {
+    "name": "Other Changes",
+    "emoji": "📝",
+    "priority": 99
+  },
+  "excludeLabels": ["automated", "autorelease: tagged", "autorelease: pending", "invalid"],
+  "keepLabels": ["dependencies"]
+}

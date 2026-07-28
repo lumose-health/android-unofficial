@@ -1,0 +1,53 @@
+name: Renovate Config Validator
+
+# The Renovate config's own gate. Runs renovate-config-validator --strict over
+# renovate.json5 on any PR that touches it, so a malformed tier rule, a bad
+# preset, a deprecated option, or a required schema migration is caught here --
+# before the config can reach the (maintainer-enabled) Renovate app.
+#
+# --strict fails on deprecations and required migrations, not only hard errors,
+# which is what keeps renovate.json5 valid against the CURRENT hosted Renovate
+# the maintainer enables at go-live. RENOVATE_VERSION is pinned so the schema
+# the config is checked against is reproducible across runs.
+
+on:
+  pull_request:
+    branches: [main, develop]
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'renovate.json5'
+      - '.github/workflows/renovate-config-validator.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: renovate-config-validator-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate renovate.json5
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          # Renovate 43 requires Node >= 24.11; pin the major so the validator
+          # runs under a supported engine.
+          node-version: '24'
+
+      - name: Validate Renovate config (strict)
+        # No file argument on purpose: the validator auto-discovers renovate.json5
+        # at the repo root and validates it as REPO config (the exact path the
+        # Renovate app resolves), rather than the superset "global config" check
+        # an explicit file path triggers.
+        env:
+          RENOVATE_VERSION: '43.260.2'
+        run: npx --yes --package "renovate@${RENOVATE_VERSION}" renovate-config-validator --strict

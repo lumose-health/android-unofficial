@@ -1,0 +1,13 @@
+{
+  "title": "Developer Reference",
+  "pages": [
+    "instrumented-tests-ci",
+    "security-testing",
+    "dependency-updates",
+    "release-and-promotion",
+    "signing-and-secrets",
+    "spdx-header-policy",
+    "plugin-architecture",
+    "wear-os-architecture"
+  ]
+}

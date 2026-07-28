@@ -1,0 +1,59 @@
+{
+  "mobile": [
+    {
+      "includeGlobs": ["app/**"],
+      "excludeGlobs": []
+    }
+  ],
+  "wear": [
+    {
+      "includeGlobs": ["wear-device/**"],
+      "excludeGlobs": []
+    }
+  ],
+  "watchface": [
+    {
+      "includeGlobs": ["watchface/**"],
+      "excludeGlobs": []
+    }
+  ],
+  "plugin": [
+    {
+      "includeGlobs": ["plugins/**"],
+      "excludeGlobs": []
+    }
+  ],
+  "ci": [
+    {
+      "includeGlobs": [".github/**"],
+      "excludeGlobs": []
+    }
+  ],
+  "docs": [
+    {
+      "includeGlobs": ["docs/**", "**/*.md"],
+      "excludeGlobs": ["CHANGELOG.md"]
+    }
+  ],
+  "dependencies": [
+    {
+      "includeGlobs": [
+        "gradle/libs.versions.toml",
+        "**/gradle.lockfile",
+        "settings-gradle.lockfile",
+        "renovate.json5"
+      ],
+      "excludeGlobs": []
+    }
+  ],
+  "security": [
+    {
+      "includeGlobs": [
+        ".github/workflows/*security*.yml",
+        "SECURITY.md",
+        "osv-scanner.toml"
+      ],
+      "excludeGlobs": []
+    }
+  ]
+}

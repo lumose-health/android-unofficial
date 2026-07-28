@@ -1,0 +1,78 @@
+name: Bootstrap Check
+
+# Minimal, always-green proof of the plumbing every other CI gate in this
+# repository depends on -- org GitHub App token minting -- plus a KVM-runner
+# reminder (see below), independent of whether app code exists yet.
+#
+# This is currently the only workflow in the repository. The real Android
+# Gate (build/test/lint) and the security/dependency gates are added in
+# later extraction stories; until they land, this file is the bootstrap
+# smoke test of the token/auth plumbing, so that plumbing is provably
+# working while the build CI is stood up.
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  bootstrap-check:
+    name: App Token Auth + Runner Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      # Mints a short-lived installation token from the org's existing
+      # glycemicgpt-ci GitHub App. CI_APP_ID / CI_APP_PRIVATE_KEY are
+      # org-level secrets (visibility: all); once this repository exists in
+      # the org they will be auto-inherited automatically, with nothing to
+      # provision per-repo. Same action already in production use across the
+      # platform monorepo's workflows; Renovate will keep the SHA current
+      # once this workflow is landed for real.
+      #
+      # Guarded against fork-originated pull_request runs: GitHub does not
+      # pass repository/org secrets to pull_request workflow runs triggered
+      # from a fork, so CI_APP_ID / CI_APP_PRIVATE_KEY would be empty and
+      # crash this step on the first external contributor's PR (this repo's
+      # CONTRIBUTING.md documents a fork-based contribution flow). Same-repo
+      # pull requests, pushes, and workflow_dispatch runs are unaffected.
+      - name: Generate token for glycemicgpt-ci
+        id: ci-token
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork != true
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.CI_APP_ID }}
+          private-key: ${{ secrets.CI_APP_PRIVATE_KEY }}
+
+      # Proves the minted token actually authenticates against the GitHub
+      # API against this repo, not just that the mint step returned a
+      # token. This is the same "auth pattern" the org's release, merge,
+      # and security bots depend on. Skipped alongside the mint step above
+      # for fork-originated pull_request runs, since there is no token to
+      # verify in that case.
+      - name: Verify token can read this repository
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork != true
+        env:
+          GH_TOKEN: ${{ steps.ci-token.outputs.token }}
+        run: |
+          repo_name=$(gh api "repos/${{ github.repository }}" --jq .name)
+          echo "Authenticated as glycemicgpt-ci; repo reachable: ${repo_name}"
+
+      # Not exercised by this placeholder (there is no emulator job yet),
+      # but the future Android Gate's instrumented-test lane needs KVM
+      # acceleration for the x86_64 emulator, same as the platform
+      # monorepo's android.yml. ubuntu-latest exposes /dev/kvm but not to
+      # the runner user by default; that lane will need the same udev-rule
+      # step android.yml uses before it can boot an AVD with acceleration.
+      # Flagging it here so it isn't rediscovered from scratch later.
+      - name: Note KVM-runner requirement for future emulator lanes
+        run: |
+          echo "Reminder: instrumented-test / emulator jobs on ubuntu-latest require the KVM udev-rule workaround (see platform monorepo .github/workflows/android.yml 'Enable KVM' step) before an x86_64 AVD will boot with acceleration."

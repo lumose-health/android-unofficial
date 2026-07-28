@@ -1,0 +1,304 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+#
+# Mobile-only CodeRabbit config for the GlycemicGPT Android/Wear OS app. Adapted
+# from the platform monorepo's .coderabbit.yaml, keeping only the Kotlin/BLE and
+# medical-safety review posture -- the backend (Python/FastAPI), web (Next.js),
+# Docker, and DAST-script instructions do not apply here and are dropped.
+#
+# Monitoring-only, safety-critical posture: this project reads glucose and pump
+# telemetry over BLE and never issues therapeutic device commands. Glucose is
+# canonical mg/dL bounded to 20-500; mmol/L is a display/input unit only, via
+# the single factor 18.0156.
+
+language: "en-US"
+tone_instructions: >
+  Be direct and precise. Focus on correctness, security, medical safety, BLE
+  protocol safety, and maintainability. Ignore style, naming, and formatting
+  unless they cause ambiguity or defects. Suggest refactors only for clear
+  defects.
+early_access: false
+enable_free_tier: true
+
+reviews:
+  profile: "chill"
+  request_changes_workflow: true
+  high_level_summary: true
+  high_level_summary_placeholder: "@coderabbitai summary"
+  auto_title_placeholder: "@coderabbitai"
+  review_status: true
+  commit_status: true
+  fail_commit_status: false
+  collapse_walkthrough: true
+  changed_files_summary: true
+  sequence_diagrams: true
+  estimate_code_review_effort: true
+  assess_linked_issues: true
+  related_issues: true
+  related_prs: true
+  suggested_labels: true
+  auto_apply_labels: false
+  suggested_reviewers: false
+  poem: false
+  abort_on_close: true
+
+  labeling_instructions:
+    - label: "mobile"
+      instructions: "Apply when PR modifies files under app/, wear-device/, or watchface/"
+    - label: "infra"
+      instructions: >
+        Apply when PR modifies CI/CD, GitHub Actions, or Gradle build
+        configuration files
+    - label: "security"
+      instructions: >
+        Apply when PR touches authentication, token storage, encryption,
+        secret handling, or BLE security code
+    - label: "ble"
+      instructions: >
+        Apply when PR modifies Bluetooth Low Energy code under
+        plugins/shipped/**/ble/**
+    - label: "plugin-api"
+      instructions: "Apply when PR modifies files under plugins/pump-driver-api/"
+    - label: "plugin-driver"
+      instructions: >
+        Apply when PR modifies files under plugins/shipped/tandem/ or
+        plugins/shipped/medtronic/
+
+  path_filters:
+    - "!**/*.png"
+    - "!**/*.jpg"
+    - "!**/*.jpeg"
+    - "!**/*.gif"
+    - "!**/*.svg"
+    - "!**/*.ico"
+    - "!**/*.webp"
+    - "!**/build/**"
+    - "!**/.gradle/**"
+    - "!**/.android/**"
+    - "!**/gradle.lockfile"
+    - "!settings-gradle.lockfile"
+    - "!**/_bmad-output/**"
+
+  path_instructions:
+    - path: "{app,wear-device,watchface}/**/*.kt"
+      instructions: |
+        Android Kotlin app (phone + Wear OS + watch face) using Jetpack Compose,
+        Hilt DI, Room DB, and BLE communication with insulin pumps.
+
+        Review focus:
+        - Kotlin idioms: null safety, coroutines, sealed classes, data classes.
+        - Jetpack Compose: proper state hoisting, remember/derivedStateOf usage,
+          recomposition efficiency, testTag for UI testing.
+        - Hilt: proper @Inject, @Module, @Provides, scope annotations.
+        - Room: proper DAO patterns, migration safety, type converters.
+        - Security: EncryptedSharedPreferences for tokens, SQLCipher for the
+          database, no sensitive data in logs.
+        - Medical safety: glucose is stored and compared in canonical mg/dL and
+          must be validated to the 20-500 mg/dL range. A user-facing mmol/L
+          display literal is not a bounds violation, but any value persisted or
+          compared as glucose must be canonical mg/dL in 20-500. The only
+          allowed conversion factor is 18.0156. No auto-bolus or therapeutic
+          device command may exist; AI-generated suggestions must carry safety
+          disclaimers and never auto-execute dosing.
+    - path: "plugins/pump-driver-api/**/*.kt"
+      instructions: |
+        Plugin API module defining interfaces and domain models for all plugins.
+
+        Critical review points:
+        - Interface stability: changes here affect all plugins. Avoid breaking
+          changes.
+        - No implementation leakage: this module must not import from :app or any
+          plugin module. Only stdlib, AndroidX, and kotlinx dependencies allowed.
+        - API version compatibility: if interfaces change, PLUGIN_API_VERSION
+          must be incremented in PluginMetadata.kt.
+        - Safety contract KDoc: all capability methods that accept SafetyLimits
+          must document the filtering/rejection behavior in KDoc.
+        - PluginCapabilityInterface marker: all new capability interfaces must
+          extend this marker so plugins can return them from getCapability().
+        - Read-only posture: no therapeutic write primitive (bolus, basal change,
+          pump-setting modification) may be added to any capability interface.
+    - path: "plugins/shipped/{tandem,medtronic}/**/*.kt"
+      instructions: |
+        Shipped pump driver plugins (Tandem t:slim X2 / Mobi; Medtronic MiniMed
+        680G/770G/780G, read-only, beta).
+
+        Critical review points:
+        - Delegation patterns: capability classes should be thin wrappers
+          delegating to BLE components.
+        - No :app imports: these modules depend on :pump-driver-api and their own
+          BLE/domain/plugin classes only.
+        - Safety limit passing: all methods receiving SafetyLimits must forward
+          them to the underlying BLE driver/parser. Never use default
+          SafetyLimits().
+        - Lifecycle: onActivated() auto-reconnects, onDeactivated() disconnects,
+          shutdown() fully releases resources.
+        - Plugin metadata: apiVersion must match PLUGIN_API_VERSION.
+        - Monitoring-only: no bolus/basal/pump-setting write code.
+    - path: "plugins/shipped/**/ble/**"
+      instructions: |
+        BLE code communicates with insulin pumps (read-only monitoring).
+
+        Critical review points:
+        - GATT operations must be serialized (one at a time) and have timeouts.
+        - Connection state machine must handle unexpected disconnect, bond loss,
+          and GATT 133 errors.
+        - Byte parsing must use the correct endianness (Little Endian for the
+          Tandem protocol) and event type IDs must match the protocol spec.
+        - Multi-packet characteristic streaming must handle reassembly with the
+          documented idle timeout.
+        - Never log raw pump data (or pump serials / auth material) at INFO level;
+          use DEBUG only.
+    - path: "{app,wear-device,watchface,plugins}/**/test*/**"
+      instructions: |
+        Review test files for:
+        - JUnit 4 + MockK best practices; coroutine test dispatchers for async
+          code; BLE mock setup for connection-state testing.
+        - Edge cases: empty data, null values, and the canonical glucose safety
+          bounds (20 and 500 mg/dL). For unit-conversion/display code, their
+          mmol/L equivalents (about 1.1 and 27.8 mmol/L) are display literals,
+          not bounds violations.
+    - path: ".github/workflows/**"
+      instructions: |
+        Review GitHub Actions workflows for:
+        - No hardcoded secrets (use GitHub secrets/vars or the 1Password loader).
+        - Third-party actions pinned to a full commit SHA.
+        - Least-privilege permissions.
+        - No command injection via untrusted input in run steps (route
+          user-controlled values through env:).
+
+  auto_review:
+    enabled: true
+    auto_incremental_review: true
+    auto_pause_after_reviewed_commits: 3
+    ignore_title_keywords:
+      - "WIP"
+      - "DO NOT MERGE"
+      - "DRAFT"
+      - "[skip review]"
+    drafts: false
+    base_branches:
+      - "develop"
+    ignore_usernames:
+      - "glycemicgpt-renovate[bot]"
+      - "glycemicgpt-release[bot]"
+      - "renovate[bot]"
+      - "dependabot[bot]"
+      - "github-actions[bot]"
+
+  finishing_touches:
+    docstrings:
+      enabled: false
+    unit_tests:
+      enabled: false
+
+  pre_merge_checks:
+    title:
+      mode: "warning"
+    description:
+      mode: "warning"
+    issue_assessment:
+      mode: "warning"
+    custom_checks:
+      - name: "No Hardcoded Secrets"
+        mode: "error"
+        instructions: |
+          Verify that no hardcoded secrets, API keys, tokens, HMAC keys,
+          passwords, keystore material, or credentials appear in the code
+          changes. Check for strings that look like API keys or tokens,
+          base64-encoded secrets, .env values committed directly, and private
+          URLs or internal hostnames. This is a medical/health-tech application
+          -- credential leaks are critical severity.
+      - name: "Medical Safety Review"
+        mode: "error"
+        instructions: |
+          If the PR modifies code that handles glucose values, insulin/pump
+          telemetry, or unit conversions:
+          - Glucose is STORED and COMPARED in canonical mg/dL. Verify every
+            persisted field, bound, threshold/alert comparison, dedup key, and
+            safety check stays in mg/dL and is bounds-checked to 20-500 mg/dL.
+          - mmol/L is a DISPLAY and INPUT unit only. The single allowed
+            conversion factor is 18.0156 (mg/dL per mmol/L). Hard-FAIL if code:
+              * stores or compares a mmol/L value as if it were mg/dL (e.g.
+                persisting 3.9 instead of ~70 -- this silently suppresses low
+                alerts), or
+              * converts the wrong direction (multiplies when it should divide,
+                or vice versa), or
+              * permits a stored mg/dL value outside 20-500 after conversion, or
+              * uses a conversion factor other than 18.0156.
+          - Do NOT flag a user-facing mmol/L display literal (e.g. 3.9, 10.0,
+            22.2) or an mmol/L input converted to mg/dL before storage as a
+            bounds violation -- only the stored/compared mg/dL value must be in
+            20-500.
+          - Verify no auto-bolus or therapeutic device-command code exists
+            (this project is monitoring-only, read-only).
+          - Verify AI-generated suggestions include safety disclaimers.
+          Pass if the PR does not touch medical data handling code.
+      - name: "BLE Protocol Safety"
+        mode: "error"
+        instructions: |
+          If the PR modifies BLE communication code:
+          - Verify GATT operations have timeouts and are serialized.
+          - Verify connection state transitions are handled.
+          - Verify byte parsing uses correct endianness (Little Endian for
+            Tandem).
+          - Verify no raw pump data, pump serials, or auth material is logged at
+            INFO level.
+          Pass if the PR does not touch BLE code.
+
+  tools:
+    detekt:
+      enabled: true
+    actionlint:
+      enabled: true
+    shellcheck:
+      enabled: true
+    yamllint:
+      enabled: true
+    markdownlint:
+      enabled: true
+    gitleaks:
+      enabled: true
+    semgrep:
+      enabled: true
+    osvScanner:
+      enabled: true
+    checkov:
+      enabled: true
+    ruff:
+      enabled: false
+    eslint:
+      enabled: false
+    pylint:
+      enabled: false
+    hadolint:
+      enabled: false
+
+chat:
+  art: false
+  auto_reply: true
+
+knowledge_base:
+  opt_out: false
+  web_search:
+    enabled: true
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - "CLAUDE.md"
+      - "docs/dev/plugin-architecture.md"
+  learnings:
+    scope: "local"
+  issues:
+    scope: "local"
+  pull_requests:
+    scope: "local"
+
+code_generation:
+  docstrings:
+    language: "en-US"
+    path_instructions:
+      - path: "**/*.kt"
+        instructions: "Use KDoc format with @param, @return, and @throws tags."
+  unit_tests:
+    path_instructions:
+      - path: "{app,wear-device,watchface,plugins}/**/*.kt"
+        instructions: "Generate JUnit 4 + MockK tests. Use coroutine test dispatchers for async code."

@@ -1,0 +1,24 @@
+# OSV-Scanner configuration
+# https://google.github.io/osv-scanner/configuration/
+#
+# Suppress known false positives or accepted risks here. Each entry requires a
+# reason explaining why it is safe to ignore. Review suppressions quarterly.
+#
+# First-scan triage (initial port of the Dependency Scan Gate):
+#   osv-scanner v2.3.3 over every committed Gradle lockfile
+#   (app/, wear-device/, watchface/, plugins/**, tools/medtronic-ble-spike/,
+#   settings-gradle.lockfile) reported NO known vulnerabilities across ~1,175
+#   resolved packages. There is nothing to accept yet, so this file ships with
+#   no active [[IgnoredVulns]] entries. When the first real advisory lands,
+#   prefer bumping the dependency (or its version-catalog pin); only suppress
+#   when there is no upstream fix and the code path is genuinely unreachable.
+#
+# Because androidx/AGP-managed artifacts are scanned, a CVE fixable only by an
+# AGP bump can turn the gate red before the bump lands. The escape hatch is a
+# suppression here with a written reason and an ignoreUntil that forces
+# re-evaluation, e.g.:
+#
+#   [[IgnoredVulns]]
+#   id = "GHSA-xxxx-yyyy-zzzz"
+#   ignoreUntil = 2026-12-31T00:00:00Z
+#   reason = "Not exploitable in this app -- <why>. No upstream fix; tracked in #NNN."

@@ -1,0 +1,17 @@
+# Configuration for the DCO GitHub App (https://github.com/apps/dco).
+# Install the app on this repository, then it reads this file automatically
+# to enforce a Signed-off-by trailer on every commit in every pull request.
+# See CONTRIBUTING.md § Developer Certificate of Origin (DCO) for the
+# contributor-facing quick start (`git commit -s`).
+
+require:
+  # Require sign-off even on commits authored by organization members.
+  # There is no exemption tier in this project -- maintainers and the
+  # project lead sign off the same as any other contributor.
+  members: true
+
+allowRemediationCommits:
+  # Let a contributor fix an entire PR's sign-off history with a single
+  # remediation commit (`git commit -s -m "chore: DCO remediation"`)
+  # instead of rewriting every individual commit in the branch.
+  individual: true

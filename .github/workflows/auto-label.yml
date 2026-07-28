@@ -1,0 +1,152 @@
+name: Auto Label PRs
+
+# Triggered on `pull_request_target` so fork PRs receive labels. This
+# event runs in the base-repo context with full secret access; we never
+# check out or execute PR-supplied code in this workflow (we only read
+# PR metadata via the GitHub API and read the labeler config from the
+# base ref). See CONTRIBUTING.md "How CI Handles Fork PRs".
+on:
+  pull_request_target:
+    branches: [main, develop]
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+
+jobs:
+  autolabeler:
+    name: Label PR
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      CONFIG_PATH: .github/autolabeler-config.json
+
+    steps:
+      - name: Generate token for glycemicgpt-ci
+        id: ci-token
+        # Token issuance is best-effort: if app secrets are rotated or
+        # missing, fall back to GITHUB_TOKEN below rather than failing the
+        # whole workflow. Under pull_request_target the default token has
+        # write scope, so labeling still works.
+        continue-on-error: true
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.CI_APP_ID }}
+          private-key: ${{ secrets.CI_APP_PRIVATE_KEY }}
+
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install dependencies
+        # Pinned by exact version: this workflow runs under
+        # pull_request_target with elevated trust, so we don't want
+        # surprise minor/patch updates of minimatch landing automatically.
+        # --no-save / --no-package-lock keep the install footprint clean.
+        # --ignore-scripts blocks install-time scripts as defense in depth
+        # against future supply-chain compromise of pinned versions
+        # (minimatch itself has no install scripts today).
+        run: npm install --no-save --no-package-lock --no-fund --no-audit --ignore-scripts minimatch@10.0.3
+
+      - name: Label PR based on file changes and conventions
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        with:
+          github-token: ${{ steps.ci-token.outputs.token || secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs').promises;
+            const path = require('path');
+            const { minimatch } = require('minimatch');
+
+            const configPath = path.resolve(process.env.CONFIG_PATH);
+            const fileContent = await fs.readFile(configPath, 'utf-8');
+            const autolabelerConfig = JSON.parse(fileContent);
+
+            const prNumber = context.payload.pull_request.number;
+            const prTitle = context.payload.pull_request.title;
+            const prBody = context.payload.pull_request.body || "";
+
+            let labelsToAdd = new Set();
+
+            // Get changed files. Paginate: listFiles defaults to 30 per page,
+            // so a large PR would otherwise be labeled from only its first 30
+            // files (and the changelog categorization keyed off those labels
+            // would be wrong).
+            const prFiles = await github.paginate(github.rest.pulls.listFiles, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+              per_page: 100,
+            });
+
+            // Apply path-based labels from config
+            for (const [label, rules] of Object.entries(autolabelerConfig)) {
+              const shouldAddLabel = prFiles.some((prFile) => {
+                return rules.some((rule) => {
+                  const isFileStatusMatch = rule.fileStatus ? rule.fileStatus === prFile.status : true;
+                  const isIncludeGlobMatch = rule.includeGlobs.length === 0 ||
+                    rule.includeGlobs.some((glob) => minimatch(prFile.filename, glob));
+                  const isExcludeGlobMatch = rule.excludeGlobs.some((glob) => minimatch(prFile.filename, glob));
+                  return isFileStatusMatch && isIncludeGlobMatch && !isExcludeGlobMatch;
+                });
+              });
+
+              if (shouldAddLabel) {
+                labelsToAdd.add(label);
+              }
+            }
+
+            // Conventional commit type labels from PR title. This repo
+            // enforces Conventional Commit PR titles (see CONTRIBUTING.md
+            // "Commit Messages"), and the changelog sub-categories key off
+            // these type labels.
+            const typeLabels = {
+              'feat': 'feature',
+              'fix': 'bugfix',
+              'docs': 'documentation',
+              'style': 'style',
+              'refactor': 'refactor',
+              'perf': 'performance',
+              'test': 'tests',
+              'build': 'build',
+              'ci': 'ci',
+              'chore': 'chore',
+              'revert': 'revert'
+            };
+
+            const typeMatch = prTitle.match(/^(\w+)(\(.+\))?!?:/);
+            if (typeMatch) {
+              const commitType = typeMatch[1].toLowerCase();
+              if (typeLabels[commitType]) {
+                labelsToAdd.add(typeLabels[commitType]);
+              }
+              // Breaking change detection: a `!:` title marker (e.g. `feat!:`)
+              // or a Conventional Commits `BREAKING CHANGE:` footer in the body.
+              // The `(^|\n)\s*` anchor keeps "non-breaking change" from matching.
+              const breakingFooter = /(^|\n)\s*BREAKING[ \-]CHANGE:/i.test(prBody);
+              if (prTitle.includes('!:') || breakingFooter) {
+                labelsToAdd.add('breaking-change');
+              }
+            }
+
+            // Nothing matched any path rule or the Conventional-Commit title:
+            // flag for manual triage (feeds the changelog "Uncategorized" scope).
+            if (labelsToAdd.size === 0) {
+              labelsToAdd.add('needs triage');
+            }
+
+            if (labelsToAdd.size > 0) {
+              try {
+                await github.rest.issues.addLabels({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: prNumber,
+                  labels: Array.from(labelsToAdd),
+                });
+                console.log(`Added labels: ${Array.from(labelsToAdd).join(', ')}`);
+              } catch (error) {
+                console.log(`Could not add labels: ${error.message}`);
+              }
+            }

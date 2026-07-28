@@ -1,0 +1,81 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  // config:recommended does NOT enable Renovate-native automerge, so it never fights the label-relay.
+  "extends": ["config:recommended", ":dependencyDashboard", ":semanticCommits", "helpers:pinGitHubActionDigests"],
+  // Renovate opens branches ONLY off develop; main is promotion-only.
+  // (Renovate 41 renamed `baseBranches` -> `baseBranchPatterns`; same semantics.)
+  "baseBranchPatterns": ["develop"],
+  // GUARD (do not remove): platformAutomerge defaults TRUE; if any rule sets automerge:true, Renovate would
+  // enqueue GitHub native auto-merge at PR creation and bypass the workflow's file allowlist.
+  "automerge": false,
+  "automergeStrategy": "squash",
+  "branchPrefix": "renovate/",
+  "semanticCommits": "enabled",
+  "semanticCommitType": "chore",
+  "semanticCommitScope": "deps",
+  // DCO: .github/dco.yml enforces a Signed-off-by trailer on EVERY commit, with no bot exemption, so
+  // Renovate must sign its own version-bump commit. gitAuthor fixes the commit author to the bot's
+  // canonical GitHub identity -- numeric user id 272302492 for glycemicgpt-renovate[bot], the value
+  // GitHub records as the author on that bot's commits -- and commitBody appends a matching Signed-off-by
+  // built from the same gitAuthor (triple braces so the "<email>" is not HTML-escaped). This is what
+  // satisfies DCO on the Renovate PR; the regen workflow's --signoff covers only its own lockfile commit.
+  "gitAuthor": "glycemicgpt-renovate[bot] <272302492+glycemicgpt-renovate[bot]@users.noreply.github.com>",
+  "commitBody": "Signed-off-by: {{{gitAuthor}}}",
+  "prHourlyLimit": 3,
+  "prConcurrentLimit": 6,
+  // Supply-chain soak (primary defense — nothing else inspects dependency bytecode). strict = Renovate does NOT
+  // open the PR until the soak passes (a hard gate; GH native auto-merge ignores Renovate's internal checks).
+  "minimumReleaseAge": "7 days",
+  "internalChecksFilter": "strict",
+  // Renovate has no Android SDK to regenerate gradle lockfiles; and lockFileMaintenance is exempt from the soak.
+  "lockFileMaintenance": { "enabled": false },
+  "labels": ["dependencies"],
+  // tools/medtronic-ble-spike is a standalone build NO required gate covers → keep human-only.
+  "ignorePaths": ["tools/**"],
+  // False positive: buildConfigField("int","DEV_BUILD_NUMBER","0") parsed as a Maven dep.
+  "ignoreDeps": ["int:DEV_BUILD_NUMBER"],
+  "timezone": "America/Chicago",
+  "schedule": ["after 9am and before 5pm every weekday"],
+  // Dual CVE signal (needs Dependency graph + Dependabot alerts enabled); both bypass the soak + limits for real
+  // CVEs. Security PRs still flow through packageRules; the auto-merge workflow withholds automerge on `security`.
+  "osvVulnerabilityAlerts": true,
+  "vulnerabilityAlerts": { "enabled": true, "labels": ["security", "dependencies"] },
+  "packageRules": [
+    // GROUPING — every group that can hold an auto-eligible package is scoped ["patch","minor"] and excludes
+    // manual packages by name, so a major/manual dep can never ride a groupmate's accumulated automerge label.
+    { "description": "AndroidX Core + Compose (auto-eligible → patch/minor)", "matchManagers": ["gradle"], "matchUpdateTypes": ["patch","minor"], "matchPackageNames": ["androidx.core:*","androidx.activity:*","androidx.lifecycle:*","androidx.navigation:*","androidx.compose:*","androidx.compose.*:*"], "groupName": "AndroidX Core + Compose" },
+    { "description": "Room (patch/minor)", "matchManagers": ["gradle"], "matchUpdateTypes": ["patch","minor"], "matchPackageNames": ["androidx.room:*"], "groupName": "AndroidX Room" },
+    { "description": "Wear OS (patch/minor; watchface-push is manual)", "matchManagers": ["gradle"], "matchUpdateTypes": ["patch","minor"], "matchPackageNames": ["androidx.wear:*","androidx.wear.*:*","!androidx.wear.watchface:watchface-push"], "groupName": "AndroidX Wear OS" },
+    { "description": "AndroidX Hilt work + compiler (patch/minor)", "matchManagers": ["gradle"], "matchUpdateTypes": ["patch","minor"], "matchPackageNames": ["androidx.hilt:hilt-work","androidx.hilt:hilt-compiler"], "groupName": "AndroidX Hilt Work" },
+    { "description": "AGP (manual)", "matchManagers": ["gradle"], "matchDepNames": ["com.android.application","com.android.library"], "groupName": "Android Gradle Plugin + Wrapper" },
+    { "description": "Gradle wrapper (manual)", "matchManagers": ["gradle-wrapper"], "groupName": "Android Gradle Plugin + Wrapper" },
+    { "description": "GitHub built-in actions (manual)", "matchManagers": ["github-actions"], "matchPackageNames": ["actions/*"], "groupName": "GitHub Actions" },
+    { "description": "Third-party CI actions (manual)", "matchManagers": ["github-actions"], "matchPackageNames": ["gradle/*","dorny/*","reactivecircus/*","googleapis/*","renovatebot/*"], "groupName": "Third-party CI actions" },
+    // Gradle constraint syntax ("[,1.2.0]" = <= 1.2.0). A SemVer "<=1.2.0" is invalid under
+    // Renovate's gradle versioning (matches nothing), so it would be ignored and let the
+    // lint-breaking 1.3.0 through -- see the hilt-navigation-compose pin note in libs.versions.toml.
+    { "matchPackageNames": ["androidx.hilt:hilt-navigation-compose"], "allowedVersions": "[,1.2.0]" },
+    // TIER B — auto-merge (label added at source; addLabels is un-strippable, so exclusions here are load-bearing).
+    // matchDepTypes:["dependencies"] scopes to libraries; if gradle doesn't tag catalog libs with that depType,
+    // Tier B matches nothing → everything falls to human review (safe-fail). Plugin ids are ALSO !-excluded.
+    // Renovate 43 rejects mixing bare "*" with other patterns ("* matches all"); an all-negative
+    // matchPackageNames means "match every gradle library dep EXCEPT the negated", preserving the intent.
+    // Crypto/cipher vendors are excluded by VENDOR GLOB (org.bouncycastle:*, net.zetetic:*,
+    // androidx.security:*, org.openminimed:*) so a future sibling artifact (e.g. bcpkix/bctls-jdk18on,
+    // security-crypto-ktx) cannot slip past this layer and auto-merge unreviewed.
+    { "description": "Tier B: auto-merge patch+minor gradle library deps", "matchManagers": ["gradle"], "matchDepTypes": ["dependencies"], "matchUpdateTypes": ["patch","minor"], "matchPackageNames": ["!org.bouncycastle:*","!net.zetetic:*","!androidx.security:*","!org.openminimed:*","!com.google.dagger:hilt-android","!com.google.dagger:hilt-android-compiler","!com.github.jeziellago:compose-markdown","!androidx.wear.watchface:watchface-push","!com.google.android.wearable.watchface.validator:validator-push-android","!com.android.application","!com.android.library","!org.jetbrains.kotlin.android","!org.jetbrains.kotlin.plugin.compose","!org.jetbrains.kotlin.plugin.serialization","!com.google.devtools.ksp","!com.google.dagger.hilt.android"], "addLabels": ["automerge"] },
+    // TIER D — human labels ONLY (placed AFTER Tier B so last-wins on `labels`); none add `automerge`.
+    { "description": "Build toolchain: gradle plugins manual", "matchManagers": ["gradle"], "matchDepTypes": ["plugin"], "groupName": "Build toolchain", "labels": ["dependencies","needs-review","build-toolchain"] },
+    { "description": "Build toolchain: plugin ids (explicit)", "matchManagers": ["gradle"], "matchPackageNames": ["com.android.application","com.android.library","org.jetbrains.kotlin.android","org.jetbrains.kotlin.plugin.compose","org.jetbrains.kotlin.plugin.serialization","com.google.devtools.ksp","com.google.dagger.hilt.android"], "groupName": "Build toolchain", "labels": ["dependencies","needs-review","build-toolchain"] },
+    { "description": "Dagger-Hilt libraries (share plugin version ref)", "matchPackageNames": ["com.google.dagger:hilt-android","com.google.dagger:hilt-android-compiler"], "groupName": "Build toolchain", "labels": ["dependencies","needs-review","build-toolchain"] },
+    { "description": "gradle-wrapper (executable jar) manual", "matchManagers": ["gradle-wrapper"], "labels": ["dependencies","needs-review","build-toolchain"] },
+    { "description": "All majors manual", "matchUpdateTypes": ["major"], "labels": ["dependencies","major","needs-review"] },
+    // Vendor globs (not exact coordinates) so a future sibling crypto artifact is caught by both this
+    // manual-review layer and the Tier B negation above.
+    { "description": "Crypto/cipher manual (patch+minor)", "matchManagers": ["gradle"], "matchPackageNames": ["org.bouncycastle:*","net.zetetic:*","androidx.security:*","org.openminimed:*"], "matchUpdateTypes": ["patch","minor"], "labels": ["dependencies","needs-review","security-sensitive"] },
+    { "description": "Crypto/cipher manual (major, last-wins)", "matchManagers": ["gradle"], "matchPackageNames": ["org.bouncycastle:*","net.zetetic:*","androidx.security:*","org.openminimed:*"], "matchUpdateTypes": ["major"], "labels": ["dependencies","major","needs-review","security-sensitive"] },
+    { "description": "JitPack markdown renderer manual", "matchPackageNames": ["com.github.jeziellago:compose-markdown"], "labels": ["dependencies","needs-review"] },
+    { "description": "Wear watchface pre-release alphas manual", "matchPackageNames": ["androidx.wear.watchface:watchface-push","com.google.android.wearable.watchface.validator:validator-push-android"], "labels": ["dependencies","needs-review","prerelease"] },
+    { "description": "GitHub Actions incl. digest re-pins manual", "matchManagers": ["github-actions"], "matchUpdateTypes": ["major","minor","patch","digest","pinDigest"], "labels": ["dependencies","needs-review","ci-actions"] }
+  ]
+}
