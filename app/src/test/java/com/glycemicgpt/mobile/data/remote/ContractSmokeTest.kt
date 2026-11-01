@@ -145,6 +145,36 @@ class ContractSmokeTest {
         assertEquals(500, body.maxGlucoseMgDl)
     }
 
+    // This payload is ahead of the vendored pin: contract/openapi.json is still v1,
+    // where basal_rate is a required number. Backend contract v6
+    // (lumose-health/GlycemicGPT#1041) made it nullable. When the pin is refreshed
+    // to v6, keep this test and do not make basalRate non-null again.
+    @Test
+    fun `pump profile segment with null basal_rate parses as unknown (contract v6)`() = runBlocking {
+        enqueue(
+            """
+            {"profile_name":"Nightscout","is_active":true,"dia_minutes":300,"max_bolus_units":10.0,
+             "segments":[
+               {"time":"00:00","start_minutes":0,"basal_rate":null,"correction_factor":50.0,
+                "carb_ratio":10.0,"target_bg":110},
+               {"time":"06:00","start_minutes":360,"basal_rate":0.0,"correction_factor":45.0,
+                "carb_ratio":9.0,"target_bg":100},
+               {"time":"12:00","start_minutes":720,"correction_factor":45.0}
+             ],
+             "synced_at":"2026-01-01T00:00:00Z"}
+            """.trimIndent(),
+        )
+        val body = api.getPumpProfile().body()!!
+        assertEquals(3, body.segments.size)
+        // Null stays null -- it must not be coerced to a 0 U/h rate.
+        assertNull(body.segments[0].basalRate)
+        assertEquals(50.0f, body.segments[0].correctionFactor!!, 0.0f)
+        // A real 0 U/h is preserved as 0, distinct from unknown.
+        assertEquals(0.0f, body.segments[1].basalRate!!, 0.0f)
+        // A missing key is tolerated and read as unknown.
+        assertNull(body.segments[2].basalRate)
+    }
+
     // --- 2. Additive drift is tolerated ---
 
     @Test
