@@ -11,6 +11,8 @@ import com.glycemicgpt.mobile.data.network.NetworkMonitor
 import com.glycemicgpt.mobile.data.network.NetworkStatus
 import com.glycemicgpt.mobile.data.remote.GlycemicGptApi
 import com.glycemicgpt.mobile.data.remote.dto.PluginDeclarationRequest
+import com.glycemicgpt.mobile.data.remote.dto.PumpProfileResponse
+import com.glycemicgpt.mobile.data.remote.dto.PumpProfileSegmentDto
 import com.glycemicgpt.mobile.data.repository.AuthRepository
 import com.glycemicgpt.mobile.data.remote.dto.GlucoseRangeResponse
 import com.glycemicgpt.mobile.data.repository.PumpDataRepository
@@ -569,6 +571,38 @@ class HomeViewModelTest {
 
         coVerify(atLeast = 1) { api.getGlucoseRange() }
         verify { glucoseRangeStore.updateAll(urgentLow = 60, low = 85, high = 190, urgentHigh = 290) }
+    }
+
+    @Test
+    fun `init refreshes pump profile when a segment has a null basal rate`() = runTest {
+        every { pumpProfileStore.isStale(any()) } returns true
+        // Parsing is covered by ContractSmokeTest; here the segments are built
+        // directly so this checks only that the refresh copes with an unknown basal.
+        val profile = PumpProfileResponse(
+            profileName = "Nightscout",
+            isActive = true,
+            diaMinutes = 300,
+            maxBolusUnits = 8.5f,
+            segments = listOf(
+                PumpProfileSegmentDto(time = "00:00", startMinutes = 0, basalRate = null, carbRatio = 10.0f),
+                PumpProfileSegmentDto(time = "06:00", startMinutes = 360, basalRate = 0.0f, carbRatio = 9.0f),
+            ),
+            syncedAt = "2026-01-01T00:00:00Z",
+        )
+        coEvery { api.getPumpProfile() } returns Response.success(profile)
+
+        createViewModel()
+        advanceTimeBy(10_000); runCurrent()
+
+        coVerify(atLeast = 1) { api.getPumpProfile() }
+        verify {
+            pumpProfileStore.updateAll(
+                profileName = "Nightscout",
+                diaMinutes = 300,
+                maxBolusUnits = 8.5f,
+                segmentCount = 2,
+            )
+        }
     }
 
     @Test
