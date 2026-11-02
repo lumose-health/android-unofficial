@@ -98,7 +98,7 @@ subprojects {
             allowDependency("net.zetetic", "sqlcipher-android", "4.13.0") {
                 because("SQLCipher BSD-style licence from Zetetic; see docs/THIRD_PARTY_LICENSES.md")
             }
-            allowDependency("org.bouncycastle", "bcprov-jdk18on", "1.84") {
+            allowDependency("org.bouncycastle", "bcprov-jdk18on", "1.85") {
                 because("Bouncy Castle Licence, an MIT-style permissive grant")
             }
 
@@ -123,6 +123,9 @@ subprojects {
 // refreshes the lockfiles (Renovate's own container lacks the Android SDK and cannot).
 // After changing dependencies manually, regenerate with:
 //   ./gradlew resolveAndLockAll --write-locks
+//
+// Read here, not inside allprojects: the catalog accessor exists only on the root project.
+val guavaFloor = libs.versions.guava.floor.get()
 allprojects {
     dependencyLocking {
         lockAllConfigurations()
@@ -143,6 +146,36 @@ allprojects {
     configurations.configureEach {
         if (excludedFromLocking(name)) {
             resolutionStrategy.deactivateDependencyLocking()
+        }
+    }
+
+    // Guava is never declared directly; it arrives transitively through the hilt/ksp
+    // annotation processors, the unit-test classpath and the wear runtime, each at a
+    // different stale version. Raise every request below the security floor in
+    // libs.versions.toml to the floor, keeping the requested -jre/-android flavour.
+    // Requests already at or above the floor, and anything that is not a plain
+    // "<major>.<minor>[.<patch>]-<flavour>" version (ranges, dynamic versions), are left alone.
+    // Where both flavours meet in one graph the -jre coordinate can win, which is harmless:
+    // Guava's Gradle module metadata still selects the Android jar for Android consumers.
+    val guavaVersion = Regex("""(\d+)\.(\d+)(?:\.(\d+))?-(jre|android)""")
+    fun belowGuavaFloor(major: Int, minor: Int, patch: Int): Boolean {
+        val (floorMajor, floorMinor, floorPatch) = guavaFloor.split('.').map(String::toInt)
+        return when {
+            major != floorMajor -> major < floorMajor
+            minor != floorMinor -> minor < floorMinor
+            else -> patch < floorPatch
+        }
+    }
+    configurations.configureEach {
+        resolutionStrategy.eachDependency {
+            if (requested.group == "com.google.guava" && requested.name == "guava") {
+                val match = guavaVersion.matchEntire(requested.version.orEmpty()) ?: return@eachDependency
+                val (major, minor, patch, flavour) = match.destructured
+                if (belowGuavaFloor(major.toInt(), minor.toInt(), patch.toIntOrNull() ?: 0)) {
+                    useVersion("$guavaFloor-$flavour")
+                    because("Guava below $guavaFloor carries a known advisory")
+                }
+            }
         }
     }
 

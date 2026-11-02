@@ -36,8 +36,8 @@ dependencies {
 
     // Cryptography. JavaSake derives its session keys with AES-CMAC, which the JDK/Android
     // JCE does not provide; BouncyCastle supplies it (org.openminimed.sake.crypto.AesCmac).
-    // Explicit pin so we stay on 1.84+ (timing-channel advisory) over JavaSake's transitive
-    // 1.79. AES-CTR/ECB use the platform JCE.
+    // Explicit pin so we stay on 1.85+ (advisories fixed in 1.84 and 1.85) over JavaSake's
+    // transitive 1.79. AES-CTR/ECB use the platform JCE.
     implementation(libs.bouncycastle)
 
     // Coroutines
