@@ -32,7 +32,11 @@ wear-watchface = "1.3.0"
 wear-watchface-push = "1.3.0-alpha07"
 wear-watchface-validator = "1.0.0-alpha09"
 play-services-wearable = "18.2.0"
-bouncycastle = "1.84"
+bouncycastle = "1.85"
+# Security floor for Guava, applied to every configuration by the resolution rule in the root
+# build.gradle.kts (hilt/ksp processors, unit-test and wear classpaths all pull it in
+# transitively). Not a direct dependency; raise it when a new Guava advisory lands.
+guava-floor = "33.7.2"
 javasake = "0.2.0"
 sqlcipher = "4.13.0"
 sqlite = "2.6.2"
