@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.15.1](https://github.com/lumose-health/android-unofficial/compare/v0.15.0...v0.15.1) (2026-11-03)
+
+
+### Bug Fixes
+
+* **api:** accept a null pump-profile basal rate ([#53](https://github.com/lumose-health/android-unofficial/issues/53)) ([e6c4aaa](https://github.com/lumose-health/android-unofficial/commit/e6c4aaa6c8da034272764ae7a2ad114ba1d56131)), closes [#52](https://github.com/lumose-health/android-unofficial/issues/52)
+* **deps:** move Bouncy Castle to 1.85 and Guava to 33.7.2 ([#56](https://github.com/lumose-health/android-unofficial/issues/56)) ([97521c9](https://github.com/lumose-health/android-unofficial/commit/97521c9216d42b9317dd70a5be74c4d3ffc8af6d))
+
 ## [0.15.0](https://github.com/lumose-health/android-unofficial/compare/v0.14.0...v0.15.0) (2026-09-08)
 
 
