@@ -273,7 +273,7 @@ val unmappedRuntimeLicenses = mapOf(
     "com.atlassian.commonmark:commonmark-ext-gfm-strikethrough:0.13.0" to "BSD-2-Clause",
     "com.atlassian.commonmark:commonmark-ext-gfm-tables:0.13.0" to "BSD-2-Clause",
     // Non-SPDX licences that ship no text in the artifact -- bundled under docs/licenses.
-    "org.bouncycastle:bcprov-jdk18on:1.84" to "BouncyCastle",
+    "org.bouncycastle:bcprov-jdk18on:1.85" to "BouncyCastle",
     "edu.princeton.cup:java-cup:10k" to "CUP",
 )
 

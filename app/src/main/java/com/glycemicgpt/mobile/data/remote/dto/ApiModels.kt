@@ -199,7 +199,10 @@ data class PluginDeclarationRequest(
 data class PumpProfileSegmentDto(
     val time: String,
     @Json(name = "start_minutes") val startMinutes: Int,
-    @Json(name = "basal_rate") val basalRate: Float,
+    // Nullable since API contract v6: null means the basal rate is unknown (e.g. a
+    // Nightscout import that carried only ISF and carb ratio). A real 0 U/h stays 0,
+    // so never coalesce null to 0 when reading this.
+    @Json(name = "basal_rate") val basalRate: Float? = null,
     @Json(name = "correction_factor") val correctionFactor: Float? = null,
     @Json(name = "carb_ratio") val carbRatio: Float? = null,
     @Json(name = "target_bg") val targetBg: Int? = null,
