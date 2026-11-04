@@ -1,9 +1,15 @@
 name: Release
 
+# push:main only -- no workflow_dispatch: the deployment branch policy
+# binds the ref, not the actor, so a dispatch on a policy-listed branch
+# would pass it. The matching backend policy is enforced in
+# lumose-health/GlycemicGPT by MI-1; see scripts/security/
+# check-secret-invariants.py and docs/dev/gated-environments.md there.
+# Recover a lost gated run by re-running the original push; failing that,
+# the lead lands the next promotion merge on main.
 on:
   push:
     branches: [main]
-  workflow_dispatch:
 
 concurrency:
   group: release-${{ github.ref }}
