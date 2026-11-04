@@ -2,11 +2,11 @@ name: Changelog
 
 # push:main only -- no workflow_dispatch: the deployment branch policy
 # binds the ref, not the actor, so a dispatch on a policy-listed branch
-# would pass it. Enforced by MI-1 (scripts/security/
-# check-secret-invariants.py); full rationale in
-# docs/dev/gated-environments.md. Recovery for a lost gated run: re-run
-# the original push run (it replays the original push payload); failing
-# that, the lead lands the next promotion merge on main.
+# would pass it. The matching backend policy is enforced in
+# lumose-health/GlycemicGPT by MI-1; see scripts/security/
+# check-secret-invariants.py and docs/dev/gated-environments.md there.
+# Recover a lost gated run by replaying the original push; failing that,
+# the lead lands the next promotion merge on main.
 on:
   push:
     branches: [main]
