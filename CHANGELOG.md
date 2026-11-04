@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-11-04
+
+### 📱 Mobile
+
+#### 📝 Other Changes
+
+- chore: sync release 0.15.1 from main to develop [@glycemicgpt-merge](https://github.com/glycemicgpt-merge) ([#62](https://github.com/lumose-health/android-unofficial/pull/62))
+
+### 🏗️ CI & Build
+
+#### 📝 Other Changes
+
+- ci: close manual dispatch for release workflows [@jlengelbrecht](https://github.com/jlengelbrecht) ([#63](https://github.com/lumose-health/android-unofficial/pull/63))
+- chore: sync changelog update from main to develop [@glycemicgpt-merge](https://github.com/glycemicgpt-merge) ([#60](https://github.com/lumose-health/android-unofficial/pull/60))
+
+<!-- changelog-cutoff:2026-11-04T05:46:36Z -->
+
+
 ## [0.15.1](https://github.com/lumose-health/android-unofficial/compare/v0.15.0...v0.15.1) (2026-11-04)
 
 
